@@ -107,6 +107,9 @@ class DatabaseSeeder extends Seeder
         // Users with mortgages: indices 2, 5, 8, 11, 14, 17 (30% of users)
         $mortgageUserIndices = [2, 5, 8, 11, 14, 17];
         
+        // Generate realistic passport numbers
+        $passportPrefixes = ['AB', 'CD', 'EF', 'GH', 'JK', 'LM', 'NP', 'QR', 'ST', 'UV', 'WX', 'YZ'];
+        
         foreach ($usersData as $index => $userData) {
             $user = User::create([
                 'full_name' => $userData['full_name'],
@@ -116,6 +119,7 @@ class DatabaseSeeder extends Seeder
                 'payment_status' => 'pending', // All users have no payment
                 'payment_date' => null,        // No payment date
                 'mobile_number' => $userData['mobile'],
+                'passport_number' => $passportPrefixes[$index % count($passportPrefixes)] . str_pad(rand(100000, 999999), 6, '0', STR_PAD_LEFT),
                 'has_mortgage' => in_array($index, $mortgageUserIndices), // Some users have mortgages
                 'handover_ready' => false,     // No one is ready yet
             ]);

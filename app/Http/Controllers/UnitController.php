@@ -19,7 +19,12 @@ class UnitController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Unit::with(['property', 'users', 'attachments', 'booking']);
+            $query = Unit::with([
+                'property', 
+                'users', 
+                'attachments.unit.property',  // Load unit and property for attachment URLs
+                'booking.snaggingDefects'
+            ]);
 
             // Filter by property if provided
             if ($request->has('property_id')) {
@@ -649,6 +654,14 @@ class UnitController extends Controller
             
             // Create folder structure: project_name/unit_no/
             $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
+            
+            // Delete existing SOA if it exists (overwrite)
+            $existingSOA = $unit->attachments()->where('type', 'soa')->first();
+            if ($existingSOA) {
+                Storage::disk('public')->delete($folderPath . '/' . $existingSOA->filename);
+                $existingSOA->delete();
+            }
+            
             $path = $file->storeAs($folderPath, $filename, 'public');
 
             $unit->attachments()->create([
@@ -688,6 +701,106 @@ class UnitController extends Controller
     }
 
     /**
+     * Bulk upload SOA files
+     */
+    public function bulkUploadSOA(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'files' => 'required|array',
+                'files.*' => 'required|file|mimes:pdf|max:10240',
+                'unit_ids' => 'required|array',
+                'unit_ids.*' => 'required|integer|exists:units,id',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $files = $request->file('files');
+            $unitIds = $request->input('unit_ids');
+            $uploadedCount = 0;
+            $errors = [];
+
+            foreach ($files as $index => $file) {
+                try {
+                    $unitId = $unitIds[$index] ?? null;
+                    
+                    if (!$unitId) {
+                        $errors[] = [
+                            'file' => $file->getClientOriginalName(),
+                            'error' => 'No unit ID provided'
+                        ];
+                        continue;
+                    }
+
+                    $unit = Unit::with('property')->findOrFail($unitId);
+                    $filename = $file->getClientOriginalName();
+                    
+                    // Create folder structure: project_name/unit_no/
+                    $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
+                    
+                    // Delete existing SOA if it exists (overwrite)
+                    $existingSOA = $unit->attachments()->where('type', 'soa')->first();
+                    if ($existingSOA) {
+                        Storage::disk('public')->delete($folderPath . '/' . $existingSOA->filename);
+                        $existingSOA->delete();
+                    }
+                    
+                    // Store with original filename
+                    $file->storeAs($folderPath, $filename, 'public');
+
+                    $unit->attachments()->create([
+                        'filename' => $filename,
+                        'type' => 'soa',
+                    ]);
+
+                    // Add remark about SOA upload
+                    $unit->remarks()->create([
+                        'date' => now()->format('Y-m-d'),
+                        'time' => now()->format('H:i:s'),
+                        'event' => 'SOA document uploaded via bulk upload',
+                        'type' => 'system',
+                        'admin_name' => $request->user()->full_name ?? 'System',
+                    ]);
+
+                    $uploadedCount++;
+                } catch (\Exception $e) {
+                    $errors[] = [
+                        'file' => $file->getClientOriginalName(),
+                        'error' => $e->getMessage()
+                    ];
+                    Log::error('Failed to upload SOA in bulk', [
+                        'file' => $file->getClientOriginalName(),
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully uploaded {$uploadedCount} SOA file(s)",
+                'uploaded_count' => $uploadedCount,
+                'errors' => $errors
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Failed to bulk upload SOA', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to bulk upload SOA',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get handover status for unit
      */
     public function getHandoverStatus($id)
@@ -695,28 +808,47 @@ class UnitController extends Controller
         try {
             $unit = Unit::with('attachments')->findOrFail($id);
 
-            $requirements = [
-                ['type' => 'payment_proof', 'label' => 'Payment Proof', 'required' => true],
+            // Buyer requirements
+            $buyerRequirements = [
+                ['type' => 'payment_proof', 'label' => '100% SOA Receipt', 'required' => true],
                 ['type' => 'ac_connection', 'label' => 'AC Connection', 'required' => true],
                 ['type' => 'dewa_connection', 'label' => 'DEWA Connection', 'required' => true],
-                ['type' => 'service_charge_ack', 'label' => 'Service Charge Acknowledgement', 'required' => true],
-                ['type' => 'developer_noc', 'label' => 'Developer NOC', 'required' => true],
+                ['type' => 'service_charge_ack_buyer', 'label' => 'Service Charge Acknowledgement (Signed by Buyer)', 'required' => true],
             ];
 
             if ($unit->has_mortgage) {
-                $requirements[] = ['type' => 'bank_noc', 'label' => 'Bank NOC', 'required' => true];
+                $buyerRequirements[] = ['type' => 'bank_noc', 'label' => 'Bank NOC', 'required' => true];
             }
 
-            $requirementsWithStatus = array_map(function($req) use ($unit) {
+            // Developer requirements
+            $developerRequirements = [
+                ['type' => 'service_charge_ack_developer', 'label' => 'Service Charge Acknowledgement (Signed by Developer)', 'required' => true],
+                ['type' => 'developer_noc_signed', 'label' => 'Developer NOC (Signed by Developer)', 'required' => true],
+            ];
+
+            $buyerRequirementsWithStatus = array_map(function($req) use ($unit) {
                 $uploaded = $unit->attachments->contains('type', $req['type']);
                 return array_merge($req, ['uploaded' => $uploaded]);
-            }, $requirements);
+            }, $buyerRequirements);
+
+            $developerRequirementsWithStatus = array_map(function($req) use ($unit) {
+                $uploaded = $unit->attachments->contains('type', $req['type']);
+                return array_merge($req, ['uploaded' => $uploaded]);
+            }, $developerRequirements);
+
+            // Check if all requirements are met
+            $buyerReady = collect($buyerRequirementsWithStatus)->every(fn($req) => $req['uploaded']);
+            $developerReady = collect($developerRequirementsWithStatus)->every(fn($req) => $req['uploaded']);
+            $handoverReady = $buyerReady && $developerReady;
 
             return response()->json([
                 'success' => true,
-                'handover_ready' => $unit->handover_ready,
+                'handover_ready' => $handoverReady,
+                'buyer_ready' => $buyerReady,
+                'developer_ready' => $developerReady,
                 'has_mortgage' => $unit->has_mortgage,
-                'requirements' => $requirementsWithStatus
+                'buyer_requirements' => $buyerRequirementsWithStatus,
+                'developer_requirements' => $developerRequirementsWithStatus
             ], 200);
         } catch (\Exception $e) {
             Log::error('Failed to get handover status', [
@@ -755,10 +887,13 @@ class UnitController extends Controller
             $unit->has_mortgage = $request->has_mortgage;
             $unit->save();
 
+            // Recheck handover status since mortgage affects required documents
+            $this->checkHandoverReady($unit);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Mortgage status updated successfully',
-                'unit' => $unit
+                'unit' => $unit->fresh()
             ], 200);
         } catch (\Exception $e) {
             Log::error('Failed to update mortgage status', [
@@ -809,13 +944,26 @@ class UnitController extends Controller
             $firstSOA = $soaAttachments->first();
             $soaUrl = $firstSOA ? $firstSOA->full_url : '#';
 
+            // Generate Service Charge Acknowledgement PDF
+            $owners = $unit->users;
+            $date = $unit->handover_email_sent_at 
+                ? \Carbon\Carbon::parse($unit->handover_email_sent_at)->format('F d, Y')
+                : now()->format('F d, Y');
+            
+            $serviceChargePdf = \PDF::loadView('pdfs.service-charge-acknowledgement', [
+                'unit' => $unit,
+                'owners' => $owners,
+                'date' => $date
+            ]);
+            $serviceChargePdfContent = $serviceChargePdf->output();
+
             // Send email to all owners with SOA attachments
             \Mail::send('emails.handover-notice', [
                 'firstName' => $firstName,
                 'soaUrl' => $soaUrl,
                 'unit' => $unit,
                 'property' => $unit->property,
-            ], function($message) use ($recipients, $unit, $soaAttachments) {
+            ], function($message) use ($recipients, $unit, $soaAttachments, $serviceChargePdfContent) {
                 $message->to($recipients)
                     ->subject('Handover Notice - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 
@@ -829,6 +977,11 @@ class UnitController extends Controller
                         ]);
                     }
                 }
+
+                // Attach Service Charge Acknowledgement PDF
+                $message->attachData($serviceChargePdfContent, 'Service_Charge_Acknowledgement_Unit_' . $unit->unit . '.pdf', [
+                    'mime' => 'application/pdf'
+                ]);
 
                 // Attach handover notice PDFs from project-specific folder
                 $projectSlug = strtolower(str_replace(' ', '-', $unit->property->project_name));
@@ -876,6 +1029,98 @@ class UnitController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send handover email',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Bulk send handover emails (queued)
+     */
+    public function bulkSendHandoverEmail(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'unit_ids' => 'required|array',
+                'unit_ids.*' => 'required|integer|exists:units,id',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $unitIds = $request->input('unit_ids');
+            $adminName = $request->user()->full_name ?? 'System';
+            $queuedCount = 0;
+            $skipped = [];
+
+            foreach ($unitIds as $unitId) {
+                try {
+                    // Quick validation before queuing
+                    $unit = Unit::with(['users', 'attachments'])->findOrFail($unitId);
+                    
+                    // Check if has SOA
+                    $hasSOA = $unit->attachments->where('type', 'soa')->isNotEmpty();
+                    if (!$hasSOA) {
+                        $skipped[] = [
+                            'unit_id' => $unitId,
+                            'unit' => $unit->unit,
+                            'reason' => 'No SOA uploaded'
+                        ];
+                        continue;
+                    }
+
+                    // Check if has owners
+                    if ($unit->users->isEmpty()) {
+                        $skipped[] = [
+                            'unit_id' => $unitId,
+                            'unit' => $unit->unit,
+                            'reason' => 'No owners assigned'
+                        ];
+                        continue;
+                    }
+
+                    // Dispatch job to queue
+                    \App\Jobs\SendHandoverEmailJob::dispatch($unitId, $adminName);
+                    $queuedCount++;
+
+                } catch (\Exception $e) {
+                    $skipped[] = [
+                        'unit_id' => $unitId,
+                        'reason' => $e->getMessage()
+                    ];
+                    Log::error('Failed to queue handover email', [
+                        'unit_id' => $unitId,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            $message = "Queued {$queuedCount} handover email(s) for sending.";
+            if (count($skipped) > 0) {
+                $message .= " Skipped " . count($skipped) . " unit(s).";
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'queued_count' => $queuedCount,
+                'skipped' => $skipped
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to bulk send handover emails', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to queue handover emails',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -1102,22 +1347,415 @@ class UnitController extends Controller
      */
     private function checkHandoverReady(Unit $unit)
     {
-        $requiredTypes = [
+        // Buyer requirements
+        $buyerRequirements = [
             'payment_proof',
             'ac_connection',
             'dewa_connection',
-            'service_charge_ack',
-            'developer_noc'
+            'service_charge_ack_buyer'
         ];
 
         if ($unit->has_mortgage) {
-            $requiredTypes[] = 'bank_noc';
+            $buyerRequirements[] = 'bank_noc';
         }
 
+        // Developer requirements
+        $developerRequirements = [
+            'service_charge_ack_developer',
+            'developer_noc_signed'
+        ];
+
+        // Get all uploaded attachment types
         $uploadedTypes = $unit->attachments->pluck('type')->unique()->toArray();
-        $allRequirementsMet = empty(array_diff($requiredTypes, $uploadedTypes));
+        
+        // Check if all buyer requirements are met
+        $buyerReady = empty(array_diff($buyerRequirements, $uploadedTypes));
+        
+        // Check if all developer requirements are met
+        $developerReady = empty(array_diff($developerRequirements, $uploadedTypes));
+        
+        // Handover is ready when both buyer and developer requirements are met
+        $allRequirementsMet = $buyerReady && $developerReady;
 
         $unit->handover_ready = $allRequirementsMet;
         $unit->save();
+        
+        \Log::info('Handover status checked', [
+            'unit_id' => $unit->id,
+            'buyer_ready' => $buyerReady,
+            'developer_ready' => $developerReady,
+            'handover_ready' => $allRequirementsMet,
+            'uploaded_types' => $uploadedTypes
+        ]);
+    }
+
+    /**
+     * Manually validate and update handover requirements status
+     */
+    public function validateHandoverRequirements(Request $request, $id)
+    {
+        try {
+            $unit = Unit::with(['attachments'])->findOrFail($id);
+            
+            // Check and update handover status
+            $this->checkHandoverReady($unit);
+            
+            // Get fresh unit data with updated status
+            $unit = $unit->fresh(['attachments', 'remarks']);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Handover requirements validated',
+                'handover_ready' => $unit->handover_ready,
+                'unit' => $unit
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Failed to validate handover requirements', [
+                'error' => $e->getMessage(),
+                'unit_id' => $id
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to validate handover requirements',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate Service Charge Acknowledgement PDF for a unit
+     */
+    public function generateServiceChargeAcknowledgement($id)
+    {
+        try {
+            $unit = Unit::with(['property', 'users'])->findOrFail($id);
+            
+            // Get all owners
+            $owners = $unit->users;
+            
+            if ($owners->isEmpty()) {
+                return response()->json(['message' => 'No owners found for this unit'], 400);
+            }
+
+            // Determine the date: use handover_email_sent_at from any owner if available, otherwise current date
+            $handoverDate = null;
+            foreach ($owners as $owner) {
+                if ($owner->handover_email_sent_at) {
+                    $handoverDate = \Carbon\Carbon::parse($owner->handover_email_sent_at)->format('d/m/Y');
+                    break;
+                }
+            }
+            
+            if (!$handoverDate) {
+                $handoverDate = now()->format('d/m/Y');
+            }
+
+            // Generate PDF
+            $pdf = \PDF::loadView('pdfs.service-charge-acknowledgement', [
+                'unit' => $unit,
+                'owners' => $owners,
+                'date' => $handoverDate,
+            ]);
+
+            $filename = 'Service_Charge_Acknowledgement_' . $unit->property->project_name . '_' . $unit->unit . '.pdf';
+            
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            \Log::error('Service charge acknowledgement generation error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to generate document'], 500);
+        }
+    }
+
+    /**
+     * Generate No Objection Certificate (NOC) for unit handover
+     */
+    public function generateNOC($id)
+    {
+        try {
+            $unit = Unit::with(['users', 'property'])->findOrFail($id);
+
+            // Get all owners
+            $owners = $unit->users;
+            if ($owners->isEmpty()) {
+                return response()->json(['message' => 'No owners found for this unit'], 404);
+            }
+
+            // Prepare data for PDF
+            $buyer1_name = $owners[0]->full_name ?? 'N/A';
+            $buyer2_name = isset($owners[1]) ? $owners[1]->full_name : '';
+
+            // Get logo paths (same as declaration PDF)
+            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
+            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            
+            $vieraLogo = file_exists($vieraLogoPath) 
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
+                : '';
+            $vantageLogo = file_exists($vantageLogoPath)
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
+                : '';
+
+            $logos = [
+                'left' => $vieraLogo,
+                'right' => $vantageLogo
+            ];
+
+            // Generate PDF
+            $pdf = \PDF::loadView('noc-handover-pdf', [
+                'date' => now()->format('F d, Y'),
+                'unit_number' => $unit->unit,
+                'buyer1_name' => $buyer1_name,
+                'buyer2_name' => $buyer2_name,
+                'logos' => $logos,
+            ]);
+
+            $filename = 'NOC_Handover_' . $unit->property->project_name . '_Unit_' . $unit->unit . '.pdf';
+            
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            \Log::error('NOC generation error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to generate NOC'], 500);
+        }
+    }
+
+    /**
+     * Get preview of developer requirements email
+     */
+    public function previewDeveloperRequirements($id)
+    {
+        try {
+            $unit = Unit::with(['users', 'property', 'attachments'])->findOrFail($id);
+
+            // Check if buyer requirements are complete
+            $buyerRequirementTypes = ['payment_proof', 'ac_connection', 'dewa_connection', 'service_charge_ack_buyer'];
+            if ($unit->has_mortgage) {
+                $buyerRequirementTypes[] = 'bank_noc';
+            }
+
+            $uploadedBuyerDocs = $unit->attachments->whereIn('type', $buyerRequirementTypes);
+            
+            if ($uploadedBuyerDocs->count() < count($buyerRequirementTypes)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Buyer requirements are not complete'
+                ], 400);
+            }
+
+            // Get primary owner
+            $primaryOwner = $unit->users->first();
+            if (!$primaryOwner) {
+                return response()->json(['message' => 'No owner found for this unit'], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'unit' => [
+                    'id' => $unit->id,
+                    'unit' => $unit->unit,
+                    'project_name' => $unit->property->project_name,
+                    'location' => $unit->property->location,
+                ],
+                'owner' => [
+                    'full_name' => $primaryOwner->full_name,
+                    'email' => $primaryOwner->email,
+                    'mobile_number' => $primaryOwner->mobile_number,
+                ],
+                'documents' => $uploadedBuyerDocs->map(function($doc) {
+                    return [
+                        'id' => $doc->id,
+                        'filename' => $doc->filename,
+                        'type' => $doc->type,
+                        'full_url' => $doc->full_url,
+                    ];
+                })->values()->toArray(),
+                'recipient_email' => 'vantage@zedcapital.ae',
+                'subject' => 'Handover Requirements - Unit ' . $unit->unit . ' - ' . $unit->property->project_name,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to preview developer requirements: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load preview',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Send buyer requirements to developer for approval
+     */
+    public function sendRequirementsToDeveloper(Request $request, $id)
+    {
+        try {
+            $unit = Unit::with(['users', 'property', 'attachments'])->findOrFail($id);
+
+            // Check if buyer requirements are complete
+            $buyerRequirementTypes = ['payment_proof', 'ac_connection', 'dewa_connection', 'service_charge_ack_buyer'];
+            if ($unit->has_mortgage) {
+                $buyerRequirementTypes[] = 'bank_noc';
+            }
+
+            $uploadedBuyerDocs = $unit->attachments->whereIn('type', $buyerRequirementTypes);
+            
+            if ($uploadedBuyerDocs->count() < count($buyerRequirementTypes)) {
+                return response()->json(['message' => 'Buyer requirements are not complete'], 400);
+            }
+
+            // Get primary owner
+            $primaryOwner = $unit->users->first();
+            if (!$primaryOwner) {
+                return response()->json(['message' => 'No owner found for this unit'], 404);
+            }
+
+            \Log::info('About to send email', [
+                'unit_id' => $unit->id,
+                'unit_number' => $unit->unit,
+                'property_name' => $unit->property->project_name,
+                'owner_name' => $primaryOwner->full_name,
+                'docs_count' => $uploadedBuyerDocs->count()
+            ]);
+
+            // Generate NOC PDF for developer to sign - get logos
+            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
+            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            
+            $vieraLogo = file_exists($vieraLogoPath) 
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
+                : '';
+            $vantageLogo = file_exists($vantageLogoPath)
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
+                : '';
+
+            $logos = [
+                'left' => $vieraLogo,
+                'right' => $vantageLogo
+            ];
+
+            $nocPdf = \PDF::loadView('noc-handover-pdf', [
+                'date' => now()->format('F d, Y'),
+                'unit_number' => $unit->unit,
+                'buyer1_name' => $primaryOwner->full_name,
+                'buyer2_name' => $unit->users->count() > 1 ? $unit->users[1]->full_name : '',
+                'logos' => $logos
+            ]);
+            $nocFilename = 'NOC_Handover_' . $unit->unit . '_' . time() . '.pdf';
+            $nocPath = storage_path('app/temp/' . $nocFilename);
+            
+            // Create temp directory if it doesn't exist
+            if (!file_exists(storage_path('app/temp'))) {
+                mkdir(storage_path('app/temp'), 0755, true);
+            }
+            
+            $nocPdf->save($nocPath);
+
+            // Send email to developer with all documents
+            \Mail::send('emails.developer-requirements', [
+                'unit' => $unit,
+                'owner' => $primaryOwner,
+                'documents' => $uploadedBuyerDocs
+            ], function ($message) use ($unit, $uploadedBuyerDocs, $nocPath, $nocFilename) {
+                $message->to('vantage@zedcapital.ae')
+                    ->subject('Handover Requirements - Unit ' . $unit->unit . ' - ' . $unit->property->project_name);
+                
+                // Attach all buyer documents
+                foreach ($uploadedBuyerDocs as $doc) {
+                    try {
+                        // Construct the file path - check multiple possible locations
+                        $possiblePaths = [];
+                        
+                        // If filepath is populated, use it
+                        if (!empty($doc->filepath)) {
+                            $possiblePaths[] = storage_path('app/public/' . $doc->filepath);
+                        }
+                        
+                        // Try: attachments/{property}/{unit}/{filename}
+                        $possiblePaths[] = storage_path('app/public/attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $doc->filename);
+                        
+                        // Try: attachments/{filename}
+                        $possiblePaths[] = storage_path('app/public/attachments/' . $doc->filename);
+                        
+                        // Try: {filename} directly
+                        $possiblePaths[] = storage_path('app/public/' . $doc->filename);
+                        
+                        $filePath = null;
+                        foreach ($possiblePaths as $path) {
+                            if (file_exists($path)) {
+                                $filePath = $path;
+                                break;
+                            }
+                        }
+                        
+                        if ($filePath && file_exists($filePath)) {
+                            \Log::info('Attaching file', ['filepath' => $filePath, 'filename' => $doc->filename]);
+                            $message->attach($filePath, [
+                                'as' => $doc->filename,
+                                'mime' => mime_content_type($filePath)
+                            ]);
+                        } else {
+                            \Log::warning('File not found for attachment', [
+                                'filename' => $doc->filename,
+                                'tried_paths' => $possiblePaths
+                            ]);
+                        }
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to attach file', [
+                            'file' => $doc->filename,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
+                }
+                
+                // Attach the NOC PDF for developer to sign
+                try {
+                    if (file_exists($nocPath)) {
+                        \Log::info('Attaching NOC PDF', ['filepath' => $nocPath, 'filename' => $nocFilename]);
+                        $message->attach($nocPath, [
+                            'as' => $nocFilename,
+                            'mime' => 'application/pdf'
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('Failed to attach NOC PDF', [
+                        'file' => $nocFilename,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            });
+
+            \Log::info('Email sent successfully');
+            
+            // Clean up temp NOC file
+            if (file_exists($nocPath)) {
+                unlink($nocPath);
+            }
+
+            // Log the activity
+            $unit->remarks()->create([
+                'date' => now()->format('Y-m-d'),
+                'time' => now()->format('H:i:s'),
+                'event' => 'Buyer requirements sent to developer for approval',
+                'type' => 'developer_email_sent',
+                'admin_name' => $request->user()->full_name ?? 'System'
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Requirements sent to developer successfully'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to send requirements to developer: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send requirements to developer',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
+

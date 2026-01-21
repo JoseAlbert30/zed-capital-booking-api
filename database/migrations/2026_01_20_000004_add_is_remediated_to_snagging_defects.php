@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('bookings', function (Blueprint $table) {
-            $table->renameColumn('handover_checklist', 'handover_pdf');
+        Schema::table('snagging_defects', function (Blueprint $table) {
+            $table->boolean('is_remediated')->default(false)->after('agreed_remediation_action');
         });
     }
 
@@ -21,8 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('bookings', function (Blueprint $table) {
-            $table->renameColumn('handover_pdf', 'handover_checklist');
+        Schema::table('snagging_defects', function (Blueprint $table) {
+            $table->dropColumn('is_remediated');
         });
     }
 };

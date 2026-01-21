@@ -18,6 +18,7 @@ class User extends Authenticatable
         'email',
         'password',
         'mobile_number',
+        'passport_number',
         'payment_status',
         'payment_date',
         'handover_ready',

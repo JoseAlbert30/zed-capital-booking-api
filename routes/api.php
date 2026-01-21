@@ -66,6 +66,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{booking}/upload-handover-file', [BookingController::class, 'uploadHandoverFile']);
         Route::delete('/{booking}/delete-handover-file', [BookingController::class, 'deleteHandoverFile']);
         Route::post('/{booking}/complete-handover', [BookingController::class, 'completeHandover']);
+        Route::post('/{booking}/generate-declaration', [BookingController::class, 'generateDeclaration']);
+        Route::post('/{booking}/generate-handover-checklist', [BookingController::class, 'generateHandoverChecklist']);
+        Route::post('/{booking}/save-declaration-signatures', [BookingController::class, 'saveDeclarationSignatures']);
+        
+        // Snagging defects
+        Route::get('/{booking}/snagging-defects', [BookingController::class, 'getSnaggingDefects']);
+        Route::post('/{booking}/snagging-defects', [BookingController::class, 'createSnaggingDefect']);
+        Route::put('/{booking}/snagging-defects/{defect}', [BookingController::class, 'updateSnaggingDefect']);
+        Route::delete('/{booking}/snagging-defects/{defect}', [BookingController::class, 'deleteSnaggingDefect']);
     });
 
     Route::prefix('units')->group(function () {
@@ -73,6 +82,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{unit}', [UnitController::class, 'show']);
         Route::post('/', [UnitController::class, 'store']);
         Route::post('/bulk', [UnitController::class, 'bulkUpload']);
+        Route::post('/bulk-upload-soa', [UnitController::class, 'bulkUploadSOA']);
+        Route::post('/bulk-send-handover', [UnitController::class, 'bulkSendHandoverEmail']);
         Route::put('/{unit}', [UnitController::class, 'update']);
         Route::delete('/{unit}', [UnitController::class, 'destroy']);
         
@@ -83,9 +94,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{unit}/send-handover-email', [UnitController::class, 'sendHandoverEmail']);
         Route::get('/{unit}/handover-status', [UnitController::class, 'getHandoverStatus']);
         Route::put('/{unit}/mortgage-status', [UnitController::class, 'updateMortgageStatus']);
+        Route::post('/{unit}/validate-handover-requirements', [UnitController::class, 'validateHandoverRequirements']);
         Route::post('/{unit}/send-booking-link', [UnitController::class, 'sendBookingLink']);
         Route::post('/{unit}/upload-attachment', [UnitController::class, 'uploadAttachment']);
         Route::delete('/{unit}/attachments/{attachment}', [UnitController::class, 'deleteAttachment']);
+        Route::get('/{unit}/service-charge-acknowledgement', [UnitController::class, 'generateServiceChargeAcknowledgement']);
+        Route::get('/{unit}/noc-handover', [UnitController::class, 'generateNOC']);
+        Route::get('/{unit}/developer-requirements-preview', [UnitController::class, 'previewDeveloperRequirements']);
+        Route::post('/{unit}/send-to-developer', [UnitController::class, 'sendRequirementsToDeveloper']);
     });
 
     Route::prefix('email')->group(function () {
@@ -94,9 +110,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/logs/{userId}', [EmailController::class, 'getUserEmailLogs']);
     });
 
-    Route::prefix('properties')->group(function () {
-        Route::post('/{property}/upload-templates', [PropertyController::class, 'uploadTemplates']);
-    });
 
     Route::get('/health', function (Request $request) {
         return response()->json(['status' => 'ok', 'user' => $request->user()]);

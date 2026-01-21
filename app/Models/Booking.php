@@ -20,6 +20,9 @@ class Booking extends Model
         'handover_declaration',
         'handover_photo',
         'client_signature',
+        'declaration_part1_signatures',
+        'declaration_part2_signatures',
+        'declaration_part3_signatures',
         'handover_completed_at',
         'handover_completed_by',
     ];
@@ -29,6 +32,9 @@ class Booking extends Model
         'handover_completed_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'declaration_part1_signatures' => 'array',
+        'declaration_part2_signatures' => 'array',
+        'declaration_part3_signatures' => 'array',
     ];
 
     protected $appends = [
@@ -46,6 +52,14 @@ class Booking extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(Unit::class);
+    }
+
+    /**
+     * Get the snagging defects for this booking.
+     */
+    public function snaggingDefects()
+    {
+        return $this->hasMany(SnaggingDefect::class);
     }
 
     /**

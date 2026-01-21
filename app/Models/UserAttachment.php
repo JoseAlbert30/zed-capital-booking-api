@@ -24,7 +24,8 @@ class UserAttachment extends Model
 
     protected $appends = ['full_url'];
 
-    protected $with = ['unit.property'];
+    // Remove automatic loading to prevent circular reference issues
+    // protected $with = ['unit.property'];
 
     /**
      * Get the user that owns the attachment.

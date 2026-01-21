@@ -600,17 +600,30 @@ class UserController extends Controller
             // Combine primary user and co-owners
             $allRecipients = collect([$user])->merge($coOwners);
 
+            // Find the first eligible unit for this user to include in the link
+            $firstEligibleUnit = $user->units()
+                ->where('payment_status', 'fully_paid')
+                ->where('handover_ready', true)
+                ->first();
+
             // Generate magic link for each recipient and send email
             $magicLinks = [];
             foreach ($allRecipients as $index => $recipient) {
                 // Generate magic link (valid for 72 hours)
                 $magicLink = MagicLink::generate($recipient, 72);
+                
+                // Include unit_id in booking URL if available
                 $bookingUrl = config('app.frontend_url') . '/booking?token=' . $magicLink->token;
+                if ($firstEligibleUnit) {
+                    $bookingUrl .= '&unit_id=' . $firstEligibleUnit->id;
+                }
 
                 // Send email (create simple template for now)
                 Mail::send('emails.booking-link', [
                     'firstName' => explode(' ', trim($recipient->full_name))[0],
                     'bookingUrl' => $bookingUrl,
+                    'unit' => $firstEligibleUnit,
+                    'property' => $firstEligibleUnit ? $firstEligibleUnit->property : null,
                 ], function ($mail) use ($recipient) {
                     $mail->to($recipient->email, $recipient->full_name);
                     $mail->subject('Welcome to Viera Residences Booking Platform');

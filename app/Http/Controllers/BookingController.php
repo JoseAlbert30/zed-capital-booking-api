@@ -15,7 +15,9 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Remark;
 use App\Models\Unit;
+use App\Models\UnitRemark;
 use App\Models\EmailLog;
+use App\Models\SnaggingDefect;
 
 class BookingController extends Controller
 {
@@ -34,7 +36,7 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $query = Booking::with(['user.units.property', 'unit']);
+        $query = Booking::with(['user.units.property', 'unit', 'snaggingDefects']);
 
         // Exclude completed bookings by default
         $query->where('status', '!=', 'completed');
@@ -52,7 +54,7 @@ class BookingController extends Controller
         if ($request->has('status') && $request->status) {
             if ($request->status === 'all') {
                 // Remove the default filter
-                $query = Booking::with(['user.units.property', 'unit']);
+                $query = Booking::with(['user.units.property', 'unit', 'snaggingDefects']);
             } else {
                 $query->where('status', $request->status);
             }
@@ -324,7 +326,24 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        return response()->json(['booking' => $booking]);
+        $booking->load([
+            'user' => function ($query) {
+                $query->with(['units' => function ($q) {
+                    $q->with('property');
+                }]);
+            },
+            'unit' => function ($query) {
+                $query->with(['property', 'users']);
+            }
+        ]);
+
+        // Ensure unit.users is included in the response
+        $bookingArray = $booking->toArray();
+        if ($booking->unit && $booking->unit->users) {
+            $bookingArray['unit']['users'] = $booking->unit->users->toArray();
+        }
+
+        return response()->json(['booking' => $bookingArray]);
     }
 
     public function update(Request $request, Booking $booking): JsonResponse
@@ -711,6 +730,17 @@ class BookingController extends Controller
             ], 422);
         }
 
+        // Check for unresolved snagging defects
+        $unresolvedDefects = SnaggingDefect::where('booking_id', $booking->id)
+            ->where('resolved', false)
+            ->count();
+
+        if ($unresolvedDefects > 0) {
+            return response()->json([
+                'message' => "Cannot complete handover. There are {$unresolvedDefects} unresolved snagging defect(s). Please resolve all defects before completing."
+            ], 422);
+        }
+
         try {
             $unit = $booking->unit;
 
@@ -791,6 +821,188 @@ class BookingController extends Controller
         ]);
     }
 
+    /**
+     * Get all snagging defects for a booking
+     */
+    public function getSnaggingDefects(Booking $booking): JsonResponse
+    {
+        $user = request()->user();
+
+        if (!$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $defects = $booking->snaggingDefects()->with('creator')->orderBy('created_at', 'asc')->get();
+
+        return response()->json(['defects' => $defects]);
+    }
+
+    /**
+     * Create a snagging defect for a booking
+     */
+    public function createSnaggingDefect(Request $request, Booking $booking): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'image' => 'nullable|file|mimes:jpeg,jpg,png|max:10240',
+            'description' => 'nullable|string',
+            'location' => 'nullable|string',
+            'agreed_remediation_action' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $unit = $booking->unit;
+            $path = null;
+            
+            // Save image if provided
+            if ($request->hasFile('image')) {
+                $folderPath = 'snagging/' . $unit->property->project_name . '/' . $unit->unit;
+                $file = $request->file('image');
+                $extension = $file->extension();
+                $filename = 'defect_' . time() . '_' . uniqid() . '.' . $extension;
+                $path = $file->storeAs($folderPath, $filename, 'public');
+            }
+            
+            // Create defect record
+            $defect = $booking->snaggingDefects()->create([
+                'image_path' => $path,
+                'description' => $request->input('description'),
+                'location' => $request->input('location'),
+                'agreed_remediation_action' => $request->input('agreed_remediation_action'),
+                'created_by' => Auth::id(),
+            ]);
+
+            // Add remark to unit timeline
+            $adminName = Auth::user()->name ?? Auth::user()->email;
+            UnitRemark::create([
+                'unit_id' => $unit->id,
+                'date' => now()->toDateString(),
+                'time' => now()->toTimeString(),
+                'event' => 'Snagging defect added' . ($request->input('location') ? ' at ' . $request->input('location') : '') . ': ' . ($request->input('description') ?: 'No description'),
+                'type' => 'snagging',
+                'admin_name' => $adminName,
+            ]);
+
+            return response()->json([
+                'message' => 'Snagging defect created successfully',
+                'defect' => $defect->load('creator'),
+            ], 201);
+        } catch (\Exception $e) {
+            \Log::error('Snagging defect creation error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to create defect'], 500);
+        }
+    }
+
+    /**
+     * Update a snagging defect
+     */
+    public function updateSnaggingDefect(Request $request, Booking $booking, SnaggingDefect $defect): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Verify defect belongs to this booking
+        if ($defect->booking_id !== $booking->id) {
+            return response()->json(['message' => 'Defect does not belong to this booking'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'description' => 'nullable|string',
+            'location' => 'nullable|string',
+            'agreed_remediation_action' => 'nullable|string',
+            'is_remediated' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $defect->update($request->only(['description', 'location', 'agreed_remediation_action', 'is_remediated']));
+
+            // Add remark to unit timeline
+            $unit = $booking->unit;
+            $adminName = Auth::user()->name ?? Auth::user()->email;
+            UnitRemark::create([
+                'unit_id' => $unit->id,
+                'date' => now()->toDateString(),
+                'time' => now()->toTimeString(),
+                'event' => 'Snagging defect updated' . ($request->input('location') ? ' at ' . $request->input('location') : '') . ': ' . ($request->input('description') ?: 'No description'),
+                'type' => 'snagging',
+                'admin_name' => $adminName,
+            ]);
+
+            return response()->json([
+                'message' => 'Snagging defect updated successfully',
+                'defect' => $defect->load('creator'),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Snagging defect update error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to update defect'], 500);
+        }
+    }
+
+    /**
+     * Delete a snagging defect
+     */
+    public function deleteSnaggingDefect(Request $request, Booking $booking, SnaggingDefect $defect): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Verify defect belongs to this booking
+        if ($defect->booking_id !== $booking->id) {
+            return response()->json(['message' => 'Defect does not belong to this booking'], 403);
+        }
+
+        try {
+            // Get defect info before deletion
+            $defectInfo = $defect->description ?: 'No description';
+            $defectLocation = $defect->location;
+            
+            // Delete the image file
+            if ($defect->image_path) {
+                Storage::disk('public')->delete($defect->image_path);
+            }
+
+            $defect->delete();
+
+            // Add remark to unit timeline
+            $unit = $booking->unit;
+            $adminName = Auth::user()->name ?? Auth::user()->email;
+            UnitRemark::create([
+                'unit_id' => $unit->id,
+                'date' => now()->toDateString(),
+                'time' => now()->toTimeString(),
+                'event' => 'Snagging defect deleted' . ($defectLocation ? ' at ' . $defectLocation : '') . ': ' . $defectInfo,
+                'type' => 'snagging',
+                'admin_name' => $adminName,
+            ]);
+
+            return response()->json([
+                'message' => 'Snagging defect deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Snagging defect deletion error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to delete defect'], 500);
+        }
+    }
+
     private function isAdmin(string $email): bool
     {
         $adminEmails = config('app.admin_emails', []);
@@ -840,6 +1052,265 @@ class BookingController extends Controller
         } catch (\Exception $e) {
             \Log::error('Failed to send congratulations email: ' . $e->getMessage());
             // Don't throw exception - handover should still complete even if email fails
+        }
+    }
+
+    /**
+     * Save declaration signatures incrementally
+     */
+    public function saveDeclarationSignatures(Request $request, Booking $booking): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($booking->user_id !== $user->id && !$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'part' => 'required|in:1,2,3',
+            'signatures' => 'required|array',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $part = $request->input('part');
+        $signatures = $request->input('signatures');
+
+        try {
+            $field = "declaration_part{$part}_signatures";
+            $booking->$field = $signatures;
+            $booking->save();
+
+            return response()->json([
+                'message' => 'Signatures saved successfully',
+                'part' => $part
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to save declaration signatures: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to save signatures'
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate Declaration PDF with snagging defects
+     */
+    public function generateDeclaration(Request $request, Booking $booking): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($booking->user_id !== $user->id && !$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        try {
+            $booking->load([
+                'user' => function ($query) {
+                    $query->with(['units' => function ($q) {
+                        $q->with('property');
+                    }]);
+                },
+                'unit' => function ($query) {
+                    $query->with(['property', 'users']);
+                }
+            ]);
+
+            $defects = SnaggingDefect::where('booking_id', $booking->id)->get();
+            
+            // Convert defect images to base64
+            foreach ($defects as $defect) {
+                if ($defect->image_path) {
+                    $imagePath = public_path('storage/' . $defect->image_path);
+                    
+                    if (file_exists($imagePath)) {
+                        $imageData = file_get_contents($imagePath);
+                        $extension = pathinfo($imagePath, PATHINFO_EXTENSION);
+                        $mimeType = $extension === 'png' ? 'image/png' : 'image/jpeg';
+                        $defect->image_base64 = 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+                    }
+                }
+            }
+            
+            // Get co-owners
+            $coOwners = $booking->unit->users->where('id', '!=', $booking->user_id)->values();
+            
+            // Get signature data from request
+            $signatureName = $request->input('signature_name', '');
+            $signatureImage = $request->input('signature_image', '');
+            $signaturesData = $request->input('signatures_data', null);
+            
+            // Save signatures to booking
+            if ($signaturesData) {
+                if (isset($signaturesData['part1']) && !empty($signaturesData['part1'])) {
+                    $booking->declaration_part1_signatures = $signaturesData['part1'];
+                }
+                if (isset($signaturesData['part2']) && !empty($signaturesData['part2'])) {
+                    $booking->declaration_part2_signatures = $signaturesData['part2'];
+                }
+                if (isset($signaturesData['part3']) && !empty($signaturesData['part3'])) {
+                    $booking->declaration_part3_signatures = $signaturesData['part3'];
+                }
+                $booking->save();
+            }
+            
+            // Convert letterhead images to base64 for dompdf
+            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
+            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            $footerPath = public_path('storage/letterheads/footer-banner.png');
+            
+            $vieraLogo = file_exists($vieraLogoPath) 
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
+                : '';
+            $vantageLogo = file_exists($vantageLogoPath)
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
+                : '';
+            $footerBanner = file_exists($footerPath)
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($footerPath))
+                : '';
+            
+            // Prepare data arrays for template
+            $seller = [
+                'name' => 'Vantage Ventures Real Estate Development L.L.C.',
+                'address' => 'Office 12F-A-04, Empire Heights A, Business Bay, Dubai, UAE',
+                'phone' => '+971 58 898 0456',
+                'email' => 'vantage@zedcapital.ae'
+            ];
+            
+            $purchaser = [
+                'name' => $booking->user->full_name ?? '',
+                'address' => $booking->user->address ?? 'N/A',
+                'phone' => $booking->user->mobile_number ?? '',
+                'email' => $booking->user->email ?? ''
+            ];
+            
+            $property = [
+                'master_community' => 'VIERA Residences, Business Bay, Dubai',
+                'building' => $booking->unit->building ?? $booking->unit->property->building_name ?? '',
+                'unit_number' => $booking->unit->unit ?? ''
+            ];
+            
+            $logos = [
+                'left' => $vieraLogo,
+                'right' => $vantageLogo
+            ];
+            
+            $date = now()->format('d M Y');            
+            // Generate HTML content for PDF
+            $html = view('declaration-pdf-v3', [
+                'date' => $date,
+                'seller' => $seller,
+                'purchaser' => $purchaser,
+                'property' => $property,
+                'logos' => $logos,
+                'defects' => $defects,
+                'coOwners' => $coOwners,
+                'signatureName' => $signatureName,
+                'signatureImage' => $signatureImage,
+                'signaturesData' => $signaturesData
+            ])->render();
+
+            // Generate PDF using Dompdf
+            $pdf = \PDF::loadHTML($html)
+                ->setPaper('a4')
+                ->setOption('isHtml5ParserEnabled', true)
+                ->setOption('isRemoteEnabled', true);
+
+            // Return PDF as base64 for frontend handling
+            return response()->json([
+                'success' => true,
+                'pdf_content' => base64_encode($pdf->output()),
+                'filename' => 'Declaration_' . $booking->id . '_' . now()->format('Ymd_His') . '.pdf'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to generate declaration: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to generate declaration PDF',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function generateHandoverChecklist(Request $request, Booking $booking): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($booking->user_id !== $user->id && !$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        try {
+            $booking->load([
+                'user' => function ($query) {
+                    $query->with(['units' => function ($q) {
+                        $q->with('property');
+                    }]);
+                },
+                'unit' => function ($query) {
+                    $query->with(['property', 'users']);
+                }
+            ]);
+
+            // Get form data from request
+            $formData = $request->all();
+            
+            // Get co-owners
+            $coOwners = $booking->unit->users->where('id', '!=', $booking->user_id)->values();
+            
+            // Convert letterhead images to base64 for dompdf
+            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
+            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            $footerPath = public_path('storage/letterheads/footer-banner.png');
+            
+            $vieraLogo = file_exists($vieraLogoPath) 
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
+                : '';
+            $vantageLogo = file_exists($vantageLogoPath)
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
+                : '';
+            $footerBanner = file_exists($footerPath)
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($footerPath))
+                : '';
+            
+            $logos = [
+                'left' => $vieraLogo,
+                'right' => $vantageLogo
+            ];
+            
+            $date = now()->format('d M Y');
+            
+            // Generate HTML content for PDF
+            $html = view('handover-checklist-pdf', [
+                'date' => $date,
+                'booking' => $booking,
+                'purchaser' => $booking->user,
+                'unit' => $booking->unit,
+                'property' => $booking->unit->property,
+                'coOwners' => $coOwners,
+                'logos' => $logos,
+                'formData' => $formData
+            ])->render();
+
+            // Generate PDF using Dompdf
+            $pdf = \PDF::loadHTML($html)
+                ->setPaper('a4')
+                ->setOption('isHtml5ParserEnabled', true)
+                ->setOption('isRemoteEnabled', true);
+
+            // Return PDF as base64 for frontend handling
+            return response()->json([
+                'success' => true,
+                'pdf_content' => base64_encode($pdf->output()),
+                'filename' => 'Handover_Checklist_' . $booking->id . '_' . now()->format('Ymd_His') . '.pdf'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to generate handover checklist: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to generate handover checklist PDF',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 }
