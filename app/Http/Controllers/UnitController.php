@@ -502,10 +502,10 @@ class UnitController extends Controller
     /**
      * Update unit payment status
      */
-    public function updatePaymentStatus(Request $request, $id)
+    public function updatePaymentStatus(Request $request, $unit)
     {
         try {
-            $unit = Unit::findOrFail($id);
+            $unit = Unit::findOrFail($unit);
 
             $validator = Validator::make($request->all(), [
                 'payment_status' => 'required|in:pending,partial,fully_paid',
@@ -582,10 +582,10 @@ class UnitController extends Controller
     /**
      * Add a remark to a unit
      */
-    public function addRemark(Request $request, $id)
+    public function addRemark(Request $request, $unit)
     {
         try {
-            $unit = Unit::findOrFail($id);
+            $unit = Unit::findOrFail($unit);
 
             $validator = Validator::make($request->all(), [
                 'remark' => 'required|string|max:1000',
@@ -631,10 +631,10 @@ class UnitController extends Controller
     /**
      * Send SOA email to all unit owners
      */
-    public function sendSOAEmail(Request $request, $id)
+    public function sendSOAEmail(Request $request, $unit)
     {
         try {
-            $unit = Unit::with('users')->findOrFail($id);
+            $unit = Unit::with('users')->findOrFail($unit);
 
             $validator = Validator::make($request->all(), [
                 'soa' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
@@ -912,10 +912,10 @@ class UnitController extends Controller
     /**
      * Send initial handover notice email to all unit owners
      */
-    public function sendHandoverEmail(Request $request, $id)
+    public function sendHandoverEmail(Request $request, $unit)
     {
         try {
-            $unit = Unit::with(['users', 'attachments', 'property'])->findOrFail($id);
+            $unit = Unit::with(['users', 'attachments', 'property'])->findOrFail($unit);
 
             // Check if SOA exists
             $soaAttachments = $unit->attachments->where('type', 'soa');
@@ -1747,10 +1747,10 @@ class UnitController extends Controller
     /**
      * Generate Utilities Registration Guide PDF for a unit
      */
-    public function generateUtilitiesGuide($id)
+    public function generateUtilitiesGuide($unit)
     {
         try {
-            $unit = Unit::with(['property'])->findOrFail($id);
+            $unit = Unit::with(['property'])->findOrFail($unit);
 
             // Get logo paths (same as declaration PDF)
             $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
