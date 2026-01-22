@@ -867,10 +867,10 @@ class UnitController extends Controller
     /**
      * Update unit mortgage status
      */
-    public function updateMortgageStatus(Request $request, $id)
+    public function updateMortgageStatus(Request $request, $unit)
     {
         try {
-            $unit = Unit::findOrFail($id);
+            $unit = Unit::findOrFail($unit);
 
             $validator = Validator::make($request->all(), [
                 'has_mortgage' => 'required|boolean',
@@ -1476,10 +1476,10 @@ class UnitController extends Controller
     /**
      * Upload attachment for unit
      */
-    public function uploadAttachment(Request $request, $id)
+    public function uploadAttachment(Request $request, $unit)
     {
         try {
-            $unit = Unit::findOrFail($id);
+            $unit = Unit::findOrFail($unit);
 
             $validator = Validator::make($request->all(), [
                 'file' => 'required|file|max:10240',
