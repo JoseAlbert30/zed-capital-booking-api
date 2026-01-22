@@ -48,8 +48,8 @@ class UserAttachment extends Model
      */
     public function getFullUrlAttribute(): string
     {
-        // Force HTTPS in production
-        $baseUrl = config('app.url');
+        // Use frontend URL for storage (proxied through app domain)
+        $baseUrl = config('app.frontend_url', config('app.url'));
         if (config('app.env') === 'production') {
             $baseUrl = str_replace('http://', 'https://', $baseUrl);
         }
@@ -62,7 +62,7 @@ class UserAttachment extends Model
         
         // For user attachments (legacy), compute path from user_id
         if ($this->user_id) {
-            return $baseUrl . '/api/users/' . $this->user_id . '/attachments/' . $this->id;
+            return config('app.url') . '/api/users/' . $this->user_id . '/attachments/' . $this->id;
         }
         
         return '';
