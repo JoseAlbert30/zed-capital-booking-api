@@ -888,7 +888,7 @@ class UnitController extends Controller
             $unit->save();
 
             // Recheck handover status since mortgage affects required documents
-            $this->checkHandoverReady($unit);
+            // $this->checkHandoverReady($unit);
 
             return response()->json([
                 'success' => true,
