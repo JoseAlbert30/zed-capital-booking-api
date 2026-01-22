@@ -961,10 +961,10 @@ class UnitController extends Controller
             $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
             $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
             
-            $vieraLogo = file_exists($vieraLogoPath) 
+            $vieraLogo = (file_exists($vieraLogoPath) && is_readable($vieraLogoPath))
                 ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
                 : '';
-            $vantageLogo = file_exists($vantageLogoPath)
+            $vantageLogo = (file_exists($vantageLogoPath) && is_readable($vantageLogoPath))
                 ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
                 : '';
 
@@ -1050,13 +1050,15 @@ class UnitController extends Controller
             Log::error('Failed to send handover email', [
                 'error' => $e->getMessage(),
                 'unit_id' => $id,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to send handover email',
-                'error' => $e->getMessage()
+                'message' => 'Failed to send handover email: ' . $e->getMessage(),
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
     }
