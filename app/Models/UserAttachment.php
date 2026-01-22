@@ -48,21 +48,31 @@ class UserAttachment extends Model
      */
     public function getFullUrlAttribute(): string
     {
-        // Use frontend URL for storage (proxied through app domain)
-        $baseUrl = config('app.frontend_url', config('app.url'));
-        if (config('app.env') === 'production') {
-            $baseUrl = str_replace('http://', 'https://', $baseUrl);
+        // Determine frontend URL based on environment
+        $frontendUrl = config('app.frontend_url');
+        
+        // If not set in config, auto-detect based on environment
+        if (!$frontendUrl || $frontendUrl === config('app.url')) {
+            if (config('app.env') === 'production') {
+                $frontendUrl = 'https://app.zedcapitalbooking.com';
+            } else {
+                $frontendUrl = 'http://localhost:3000';
+            }
         }
         
         // For unit attachments, compute path from unit relationship
         if ($this->unit_id && $this->unit) {
             $folderPath = 'attachments/' . $this->unit->property->project_name . '/' . $this->unit->unit;
-            return $baseUrl . '/storage/' . $folderPath . '/' . $this->filename;
+            return $frontendUrl . '/storage/' . $folderPath . '/' . $this->filename;
         }
         
-        // For user attachments (legacy), compute path from user_id
+        // For user attachments (legacy), use backend API URL
         if ($this->user_id) {
-            return config('app.url') . '/api/users/' . $this->user_id . '/attachments/' . $this->id;
+            $apiUrl = config('app.url');
+            if (config('app.env') === 'production') {
+                $apiUrl = str_replace('http://', 'https://', $apiUrl);
+            }
+            return $apiUrl . '/api/users/' . $this->user_id . '/attachments/' . $this->id;
         }
         
         return '';
