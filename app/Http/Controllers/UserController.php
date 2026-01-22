@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -821,11 +822,6 @@ class UserController extends Controller
                 throw $e;
             }
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request' => $request->all()
-            ]);
-
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create client',
@@ -1180,10 +1176,6 @@ class UserController extends Controller
                 throw $e;
             }
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to bulk upload clients',

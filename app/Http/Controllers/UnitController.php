@@ -127,9 +127,6 @@ class UnitController extends Controller
                 'units' => $units
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -158,9 +155,6 @@ class UnitController extends Controller
                 'unit' => $unit
             ], 200);
         } catch (\Exception $e) {
-                'unit_id' => $id,
-                'error' => $e->getMessage()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -224,10 +218,6 @@ class UnitController extends Controller
                 'unit' => $unit
             ], 201);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request' => $request->all()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -398,9 +388,6 @@ class UnitController extends Controller
                 throw $e;
             }
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -445,10 +432,6 @@ class UnitController extends Controller
                 'unit' => $unit
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'unit_id' => $unit->id
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -479,10 +462,6 @@ class UnitController extends Controller
                 'message' => 'Unit deleted successfully'
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'unit_id' => $unit->id
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -495,10 +474,10 @@ class UnitController extends Controller
     /**
      * Update unit payment status
      */
-    public function updatePaymentStatus(Request $request, $unit)
+    public function updatePaymentStatus(Request $request, $id)
     {
         try {
-            $unit = Unit::findOrFail($unit);
+            $unit = Unit::findOrFail($id);
 
             $validator = Validator::make($request->all(), [
                 'payment_status' => 'required|in:pending,partial,fully_paid',
@@ -559,9 +538,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['attachments', 'users', 'remarks'])
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $unit
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -574,10 +550,10 @@ class UnitController extends Controller
     /**
      * Add a remark to a unit
      */
-    public function addRemark(Request $request, $unit)
+    public function addRemark(Request $request, $id)
     {
         try {
-            $unit = Unit::findOrFail($unit);
+            $unit = Unit::findOrFail($id);
 
             $validator = Validator::make($request->all(), [
                 'remark' => 'required|string|max:1000',
@@ -607,9 +583,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['remarks'])
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $unit
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -622,10 +595,10 @@ class UnitController extends Controller
     /**
      * Send SOA email to all unit owners
      */
-    public function sendSOAEmail(Request $request, $unit)
+    public function sendSOAEmail(Request $request, $id)
     {
         try {
-            $unit = Unit::with('users')->findOrFail($unit);
+            $unit = Unit::with('users')->findOrFail($id);
 
             $validator = Validator::make($request->all(), [
                 'soa' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
@@ -678,9 +651,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['attachments', 'remarks'])
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $unit
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -764,9 +734,6 @@ class UnitController extends Controller
                         'file' => $file->getClientOriginalName(),
                         'error' => $e->getMessage()
                     ];
-                        'file' => $file->getClientOriginalName(),
-                        'error' => $e->getMessage()
-                    ]);
                 }
             }
 
@@ -777,8 +744,6 @@ class UnitController extends Controller
                 'errors' => $errors
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -839,9 +804,6 @@ class UnitController extends Controller
                 'developer_requirements' => $developerRequirementsWithStatus
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $id
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -854,10 +816,10 @@ class UnitController extends Controller
     /**
      * Update unit mortgage status
      */
-    public function updateMortgageStatus(Request $request, $unit)
+    public function updateMortgageStatus(Request $request, $id)
     {
         try {
-            $unit = Unit::findOrFail($unit);
+            $unit = Unit::findOrFail($id);
 
             $validator = Validator::make($request->all(), [
                 'has_mortgage' => 'required|boolean',
@@ -883,9 +845,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh()
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $unit
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -1033,12 +992,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['remarks', 'users', 'attachments'])
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $unit,
-                'trace' => $e->getTraceAsString(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -1107,9 +1060,6 @@ class UnitController extends Controller
                         'unit_id' => $unitId,
                         'reason' => $e->getMessage()
                     ];
-                        'unit_id' => $unitId,
-                        'error' => $e->getMessage()
-                    ]);
                 }
             }
 
@@ -1145,9 +1095,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -1204,9 +1151,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'batch_id' => $batchId
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -1237,8 +1181,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-                'error' => $e->getMessage()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -1328,9 +1270,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -1370,9 +1309,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'batch_id' => $batchId
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -1438,10 +1374,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['remarks'])
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $id,
-                'trace' => $e->getTraceAsString()
-            ]);
 
             return response()->json([
                 'success' => false,
@@ -1454,10 +1386,10 @@ class UnitController extends Controller
     /**
      * Upload attachment for unit
      */
-    public function uploadAttachment(Request $request, $unit)
+    public function uploadAttachment(Request $request, $id)
     {
         try {
-            $unit = Unit::findOrFail($unit);
+            $unit = Unit::findOrFail($id);
 
             $validator = Validator::make($request->all(), [
                 'file' => 'required|file|max:10240',
@@ -1517,10 +1449,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['attachments', 'remarks'])
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $unit
-            ]);
-
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to upload attachment',
@@ -1582,11 +1510,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['attachments', 'remarks'])
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $unitId,
-                'attachment_id' => $attachmentId
-            ]);
-
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete attachment',
@@ -1656,10 +1579,6 @@ class UnitController extends Controller
                 'unit' => $unit
             ], 200);
         } catch (\Exception $e) {
-                'error' => $e->getMessage(),
-                'unit_id' => $id
-            ]);
-
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to validate handover requirements',
@@ -1714,10 +1633,10 @@ class UnitController extends Controller
     /**
      * Generate Utilities Registration Guide PDF for a unit
      */
-    public function generateUtilitiesGuide($unit)
+    public function generateUtilitiesGuide($id)
     {
         try {
-            $unit = Unit::with(['property'])->findOrFail($unit);
+            $unit = Unit::with(['property'])->findOrFail($id);
 
             // Get logo paths (same as declaration PDF)
             $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
@@ -1888,13 +1807,6 @@ class UnitController extends Controller
                 return response()->json(['message' => 'No owner found for this unit'], 404);
             }
 
-                'unit_id' => $unit->id,
-                'unit_number' => $unit->unit,
-                'property_name' => $unit->property->project_name,
-                'owner_name' => $primaryOwner->full_name,
-                'docs_count' => $uploadedBuyerDocs->count()
-            ]);
-
             // Generate NOC PDF for developer to sign - get logos
             $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
             $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
@@ -1965,20 +1877,12 @@ class UnitController extends Controller
                             }
                         }
                         
-                        if ($filePath && file_exists($filePath)) {
-                            $message->attach($filePath, [
-                                'as' => $doc->filename,
-                                'mime' => mime_content_type($filePath)
-                            ]);
-                        } else {
-                                'filename' => $doc->filename,
-                                'tried_paths' => $possiblePaths
-                            ]);
-                        }
                     } catch (\Exception $e) {
-                            'file' => $doc->filename,
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Failed to locate attachment file: ' . $doc->filename,
                             'error' => $e->getMessage()
-                        ]);
+                        ], 500);
                     }
                 }
                 
@@ -1987,16 +1891,17 @@ class UnitController extends Controller
                     if (file_exists($nocPath)) {
                         $message->attach($nocPath, [
                             'as' => $nocFilename,
-                            'mime' => 'application/pdf'
+                            'mime' => 'application/pdf',
                         ]);
                     }
                 } catch (\Exception $e) {
-                        'file' => $nocFilename,
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Failed to attach NOC PDF',
                         'error' => $e->getMessage()
-                    ]);
+                    ], 500);
                 }
             });
-
             
             // Clean up temp NOC file
             if (file_exists($nocPath)) {
@@ -2017,11 +1922,6 @@ class UnitController extends Controller
                 'message' => 'Requirements sent to developer successfully'
             ]);
         } catch (\Exception $e) {
-                'exception' => $e,
-                'trace' => $e->getTraceAsString(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile()
-            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send requirements to developer',
