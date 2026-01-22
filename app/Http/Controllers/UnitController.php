@@ -1049,7 +1049,7 @@ class UnitController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to send handover email', [
                 'error' => $e->getMessage(),
-                'unit_id' => $id,
+                'unit_id' => $unit,
                 'trace' => $e->getTraceAsString(),
                 'line' => $e->getLine(),
                 'file' => $e->getFile()
