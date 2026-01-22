@@ -82,16 +82,17 @@ class SendHandoverEmailJob implements ShouldQueue
             ]);
             $serviceChargePdfContent = $serviceChargePdf->output();
 
-            // Generate Utilities Registration Guide PDF with logos
-            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
-            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            // Generate Utilities Registration Guide PDF with logos using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
             
-            $vieraLogo = file_exists($vieraLogoPath) 
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
-                : '';
-            $vantageLogo = file_exists($vantageLogoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
-                : '';
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
 
             $utilitiesGuidePdf = PDF::loadView('utilities-registration-guide', [
                 'dewaPremiseNumber' => $unit->dewa_premise_number ?? 'N/A',
@@ -102,14 +103,10 @@ class SendHandoverEmailJob implements ShouldQueue
             ]);
             $utilitiesGuidePdfContent = $utilitiesGuidePdf->output();
 
-            // Save utilities guide PDF to storage
-            $utilitiesGuideDir = storage_path('app/public/attachments/' . $unit->property->project_name . '/' . $unit->unit);
-            if (!file_exists($utilitiesGuideDir)) {
-                mkdir($utilitiesGuideDir, 0755, true);
-            }
+            // Save utilities guide PDF to storage using Laravel Storage
             $utilitiesGuideFilename = 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf';
-            $utilitiesGuidePath = $utilitiesGuideDir . '/' . $utilitiesGuideFilename;
-            file_put_contents($utilitiesGuidePath, $utilitiesGuidePdfContent);
+            $storagePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $utilitiesGuideFilename;
+            \Storage::disk('public')->put($storagePath, $utilitiesGuidePdfContent);
 
             // Send email to all owners with SOA attachments
             Mail::send('emails.handover-notice', [

@@ -1037,14 +1037,12 @@ class BookingController extends Controller
 
             $defects = SnaggingDefect::where('booking_id', $booking->id)->get();
             
-            // Convert defect images to base64
+            // Convert defect images to base64 using Storage facade
             foreach ($defects as $defect) {
                 if ($defect->image_path) {
-                    $imagePath = public_path('storage/' . $defect->image_path);
-                    
-                    if (file_exists($imagePath)) {
-                        $imageData = file_get_contents($imagePath);
-                        $extension = pathinfo($imagePath, PATHINFO_EXTENSION);
+                    if (\Storage::disk('public')->exists($defect->image_path)) {
+                        $imageData = \Storage::disk('public')->get($defect->image_path);
+                        $extension = pathinfo($defect->image_path, PATHINFO_EXTENSION);
                         $mimeType = $extension === 'png' ? 'image/png' : 'image/jpeg';
                         $defect->image_base64 = 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
                     }
