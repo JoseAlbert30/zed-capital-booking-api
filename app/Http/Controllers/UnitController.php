@@ -888,7 +888,7 @@ class UnitController extends Controller
             $unit->save();
 
             // Recheck handover status since mortgage affects required documents
-            // $this->checkHandoverReady($unit);
+            $this->checkHandoverReady($unit);
 
             return response()->json([
                 'success' => true,
@@ -1657,13 +1657,6 @@ class UnitController extends Controller
         $unit->handover_ready = $allRequirementsMet;
         $unit->save();
         
-        \Log::info('Handover status checked', [
-            'unit_id' => $unit->id,
-            'buyer_ready' => $buyerReady,
-            'developer_ready' => $developerReady,
-            'handover_ready' => $allRequirementsMet,
-            'uploaded_types' => $uploadedTypes
-        ]);
     }
 
     /**
