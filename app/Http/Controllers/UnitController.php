@@ -902,16 +902,17 @@ class UnitController extends Controller
             ]);
             $serviceChargePdfContent = $serviceChargePdf->output();
 
-            // Generate Utilities Registration Guide PDF with logos
-            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
-            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            // Generate Utilities Registration Guide PDF with logos using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
             
-            $vieraLogo = (file_exists($vieraLogoPath) && is_readable($vieraLogoPath))
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
-                : '';
-            $vantageLogo = (file_exists($vantageLogoPath) && is_readable($vantageLogoPath))
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
-                : '';
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
 
             $utilitiesGuidePdf = \PDF::loadView('utilities-registration-guide', [
                 'dewaPremiseNumber' => $unit->dewa_premise_number ?? 'N/A',
@@ -922,14 +923,10 @@ class UnitController extends Controller
             ]);
             $utilitiesGuidePdfContent = $utilitiesGuidePdf->output();
 
-            // Save utilities guide PDF to storage
-            $utilitiesGuideDir = storage_path('app/public/attachments/' . $unit->property->project_name . '/' . $unit->unit);
-            if (!file_exists($utilitiesGuideDir)) {
-                mkdir($utilitiesGuideDir, 0755, true);
-            }
+            // Save utilities guide PDF to storage using Laravel Storage
             $utilitiesGuideFilename = 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf';
-            $utilitiesGuidePath = $utilitiesGuideDir . '/' . $utilitiesGuideFilename;
-            file_put_contents($utilitiesGuidePath, $utilitiesGuidePdfContent);
+            $storagePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $utilitiesGuideFilename;
+            \Storage::disk('public')->put($storagePath, $utilitiesGuidePdfContent);
 
             // Send email to all owners with SOA attachments
             \Mail::send('emails.handover-notice', [
@@ -1638,16 +1635,17 @@ class UnitController extends Controller
         try {
             $unit = Unit::with(['property'])->findOrFail($id);
 
-            // Get logo paths (same as declaration PDF)
-            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
-            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            // Get logos using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
             
-            $vieraLogo = file_exists($vieraLogoPath) 
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
-                : '';
-            $vantageLogo = file_exists($vantageLogoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
-                : '';
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
 
             $logos = [
                 'left' => $vieraLogo,
@@ -1686,16 +1684,17 @@ class UnitController extends Controller
             $buyer1_name = $owners[0]->full_name ?? 'N/A';
             $buyer2_name = isset($owners[1]) ? $owners[1]->full_name : '';
 
-            // Get logo paths (same as declaration PDF)
-            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
-            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            // Get logos using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
             
-            $vieraLogo = file_exists($vieraLogoPath) 
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
-                : '';
-            $vantageLogo = file_exists($vantageLogoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
-                : '';
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
 
             $logos = [
                 'left' => $vieraLogo,
@@ -1807,16 +1806,17 @@ class UnitController extends Controller
                 return response()->json(['message' => 'No owner found for this unit'], 404);
             }
 
-            // Generate NOC PDF for developer to sign - get logos
-            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
-            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            // Generate NOC PDF for developer to sign - get logos using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
             
-            $vieraLogo = file_exists($vieraLogoPath) 
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
-                : '';
-            $vantageLogo = file_exists($vantageLogoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
-                : '';
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
 
             $logos = [
                 'left' => $vieraLogo,

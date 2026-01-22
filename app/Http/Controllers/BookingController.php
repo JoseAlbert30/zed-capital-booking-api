@@ -1073,20 +1073,22 @@ class BookingController extends Controller
                 $booking->save();
             }
             
-            // Convert letterhead images to base64 for dompdf
-            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
-            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
-            $footerPath = public_path('storage/letterheads/footer-banner.png');
+            // Convert letterhead images to base64 using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
+            $footerBanner = '';
             
-            $vieraLogo = file_exists($vieraLogoPath) 
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
-                : '';
-            $vantageLogo = file_exists($vantageLogoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
-                : '';
-            $footerBanner = file_exists($footerPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($footerPath))
-                : '';
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/footer-banner.png')) {
+                $footerBanner = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/footer-banner.png'));
+            }
             
             // Prepare data arrays for template
             $seller = [
@@ -1175,20 +1177,22 @@ class BookingController extends Controller
             // Get co-owners
             $coOwners = $booking->unit->users->where('id', '!=', $booking->user_id)->values();
             
-            // Convert letterhead images to base64 for dompdf
-            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
-            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
-            $footerPath = public_path('storage/letterheads/footer-banner.png');
+            // Convert letterhead images to base64 using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
+            $footerBanner = '';
             
-            $vieraLogo = file_exists($vieraLogoPath) 
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
-                : '';
-            $vantageLogo = file_exists($vantageLogoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
-                : '';
-            $footerBanner = file_exists($footerPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($footerPath))
-                : '';
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/footer-banner.png')) {
+                $footerBanner = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/footer-banner.png'));
+            }
             
             $logos = [
                 'left' => $vieraLogo,
