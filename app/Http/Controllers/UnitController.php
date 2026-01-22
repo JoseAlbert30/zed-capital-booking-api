@@ -1660,7 +1660,12 @@ class UnitController extends Controller
 
             $filename = 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf';
             
-            return $pdf->download($filename);
+            // Save to storage first
+            $storagePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $filename;
+            \Storage::disk('public')->put($storagePath, $pdf->output());
+            
+            // Return the file from storage
+            return \Storage::disk('public')->download($storagePath, $filename);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Failed to generate utilities guide'], 500);
         }
