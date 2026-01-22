@@ -869,6 +869,15 @@ class UserController extends Controller
             DB::beginTransaction();
 
             try {
+                // Get property to use building name
+                $property = \App\Models\Property::find($request->property_id);
+                if (!$property) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Property not found'
+                    ], 404);
+                }
+                
                 if ($extension === 'csv' || $extension === 'txt') {
                     // Parse CSV
                     $handle = fopen($file->getRealPath(), 'r');
@@ -886,9 +895,9 @@ class UserController extends Controller
                             continue;
                         }
                         
-                        // Expected format: S.NO, Unit No, DEWA Premise No, Status, Buyer 1 Name, Email ID, Buyer 2 Name, Email ID
-                        if (count($row) < 8) {
-                            $results['errors'][] = "Row {$results['total']}: Invalid format - expected 8 columns";
+                        // Expected format: S.NO, Unit No, DEWA Premise No, Status, Buyer 1 Name, Passport, Contact, Email, Buyer 2 Name, Passport, Contact, Email
+                        if (count($row) < 12) {
+                            $results['errors'][] = "Row {$results['total']}: Invalid format - expected 12 columns";
                             $results['skipped']++;
                             continue;
                         }
@@ -897,13 +906,19 @@ class UserController extends Controller
                         $dewaPremiseNumber = trim($row[2]);
                         $status = trim($row[3]);
                         $buyer1Name = trim($row[4]);
-                        $buyer1Email = trim($row[5]);
-                        $buyer2Name = isset($row[6]) ? trim($row[6]) : '';
-                        $buyer2Email = isset($row[7]) ? trim($row[7]) : '';
+                        $buyer1Email = trim($row[7]);
+                        $buyer2Name = isset($row[8]) ? trim($row[8]) : '';
+                        $buyer2Email = isset($row[11]) ? trim($row[11]) : '';
                         
                         // Skip if no buyers (Available/Blocked status)
                         if (empty($buyer1Name) && empty($buyer1Email)) {
                             continue;
+                        }
+
+                        // Extract floor from unit number (first digit(s))
+                        $floor = '';
+                        if (strlen($unitNumber) >= 2) {
+                            $floor = substr($unitNumber, 0, -2); // All digits except last 2
                         }
 
                         // Find or create unit
@@ -916,12 +931,18 @@ class UserController extends Controller
                             $unit = \App\Models\Unit::create([
                                 'property_id' => $request->property_id,
                                 'unit' => $unitNumber,
+                                'floor' => $floor,
+                                'building' => $property->project_name,
                                 'dewa_premise_number' => $dewaPremiseNumber,
                                 'status' => 'unclaimed'
                             ]);
                         } else {
-                            // Update DEWA premise number if unit exists
-                            $unit->update(['dewa_premise_number' => $dewaPremiseNumber]);
+                            // Update DEWA premise number, floor, and building if unit exists
+                            $unit->update([
+                                'dewa_premise_number' => $dewaPremiseNumber,
+                                'floor' => $floor,
+                                'building' => $property->project_name
+                            ]);
                         }
 
                         // Process Buyer 1
@@ -1021,9 +1042,9 @@ class UserController extends Controller
                             continue;
                         }
                         
-                        // Expected format: S.NO, Unit No, DEWA Premise No, Status, Buyer 1 Name, Email ID, Buyer 2 Name, Email ID
-                        if (count($row) < 8) {
-                            $results['errors'][] = "Row {$results['total']}: Invalid format - expected 8 columns";
+                        // Expected format: S.NO, Unit No, DEWA Premise No, Status, Buyer 1 Name, Passport, Contact, Email, Buyer 2 Name, Passport, Contact, Email
+                        if (count($row) < 12) {
+                            $results['errors'][] = "Row {$results['total']}: Invalid format - expected 12 columns";
                             $results['skipped']++;
                             continue;
                         }
@@ -1032,13 +1053,19 @@ class UserController extends Controller
                         $dewaPremiseNumber = trim($row[2]);
                         $status = trim($row[3]);
                         $buyer1Name = trim($row[4]);
-                        $buyer1Email = trim($row[5]);
-                        $buyer2Name = isset($row[6]) ? trim($row[6]) : '';
-                        $buyer2Email = isset($row[7]) ? trim($row[7]) : '';
+                        $buyer1Email = trim($row[7]);
+                        $buyer2Name = isset($row[8]) ? trim($row[8]) : '';
+                        $buyer2Email = isset($row[11]) ? trim($row[11]) : '';
                         
                         // Skip if no buyers (Available/Blocked status)
                         if (empty($buyer1Name) && empty($buyer1Email)) {
                             continue;
+                        }
+
+                        // Extract floor from unit number (first digit(s))
+                        $floor = '';
+                        if (strlen($unitNumber) >= 2) {
+                            $floor = substr($unitNumber, 0, -2); // All digits except last 2
                         }
 
                         // Find or create unit
@@ -1051,12 +1078,18 @@ class UserController extends Controller
                             $unit = \App\Models\Unit::create([
                                 'property_id' => $request->property_id,
                                 'unit' => $unitNumber,
+                                'floor' => $floor,
+                                'building' => $property->project_name,
                                 'dewa_premise_number' => $dewaPremiseNumber,
                                 'status' => 'unclaimed'
                             ]);
                         } else {
-                            // Update DEWA premise number if unit exists
-                            $unit->update(['dewa_premise_number' => $dewaPremiseNumber]);
+                            // Update DEWA premise number, floor, and building if unit exists
+                            $unit->update([
+                                'dewa_premise_number' => $dewaPremiseNumber,
+                                'floor' => $floor,
+                                'building' => $property->project_name
+                            ]);
                         }
 
                         // Process Buyer 1

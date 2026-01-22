@@ -1084,6 +1084,7 @@ class UnitController extends Controller
             $adminName = $request->user()->full_name ?? 'System';
             $queuedCount = 0;
             $skipped = [];
+            $validUnitIds = [];
 
             foreach ($unitIds as $unitId) {
                 try {
@@ -1111,8 +1112,7 @@ class UnitController extends Controller
                         continue;
                     }
 
-                    // Dispatch job to queue
-                    \App\Jobs\SendHandoverEmailJob::dispatch($unitId, $adminName);
+                    $validUnitIds[] = $unitId;
                     $queuedCount++;
 
                 } catch (\Exception $e) {
@@ -1127,6 +1127,24 @@ class UnitController extends Controller
                 }
             }
 
+            // Create batch tracking record
+            $batchId = \Illuminate\Support\Str::uuid()->toString();
+            $batch = \App\Models\HandoverEmailBatch::create([
+                'batch_id' => $batchId,
+                'total_emails' => $queuedCount,
+                'sent_count' => 0,
+                'failed_count' => 0,
+                'status' => 'processing',
+                'unit_ids' => $validUnitIds,
+                'initiated_by' => $adminName,
+                'started_at' => now()
+            ]);
+
+            // Dispatch jobs with batch ID
+            foreach ($validUnitIds as $unitId) {
+                \App\Jobs\SendHandoverEmailJob::dispatch($unitId, $adminName, $batchId);
+            }
+
             $message = "Queued {$queuedCount} handover email(s) for sending.";
             if (count($skipped) > 0) {
                 $message .= " Skipped " . count($skipped) . " unit(s).";
@@ -1136,7 +1154,8 @@ class UnitController extends Controller
                 'success' => true,
                 'message' => $message,
                 'queued_count' => $queuedCount,
-                'skipped' => $skipped
+                'skipped' => $skipped,
+                'batch_id' => $batchId
             ], 200);
 
         } catch (\Exception $e) {
@@ -1148,6 +1167,235 @@ class UnitController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to queue handover emails',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get handover email batch progress
+     */
+    public function getHandoverEmailProgress($batchId)
+    {
+        try {
+            $batch = \App\Models\HandoverEmailBatch::where('batch_id', $batchId)->first();
+
+            if (!$batch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch not found'
+                ], 404);
+            }
+
+            // Get failed units details
+            $failedUnits = [];
+            if ($batch->failed_unit_ids && count($batch->failed_unit_ids) > 0) {
+                $failedUnits = Unit::whereIn('id', $batch->failed_unit_ids)
+                    ->with(['users', 'property'])
+                    ->get()
+                    ->map(function($unit) {
+                        return [
+                            'id' => $unit->id,
+                            'unit_number' => $unit->unit,
+                            'property' => $unit->property->project_name ?? 'N/A',
+                            'owners' => $unit->users->pluck('full_name')->toArray()
+                        ];
+                    });
+            }
+
+            return response()->json([
+                'success' => true,
+                'batch' => [
+                    'batch_id' => $batch->batch_id,
+                    'total_emails' => $batch->total_emails,
+                    'sent_count' => $batch->sent_count,
+                    'failed_count' => $batch->failed_count,
+                    'status' => $batch->status,
+                    'progress_percentage' => $batch->getProgressPercentage(),
+                    'started_at' => $batch->started_at,
+                    'completed_at' => $batch->completed_at,
+                    'failed_units' => $failedUnits
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to get batch progress', [
+                'error' => $e->getMessage(),
+                'batch_id' => $batchId
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get batch progress',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Check SOA generation status for all units
+     */
+    public function checkSOAStatus()
+    {
+        try {
+            $totalUnits = Unit::whereHas('users')->count();
+            $unitsWithSOA = Unit::whereHas('attachments', function ($query) {
+                $query->where('type', 'soa');
+            })->count();
+            $unitsWithoutSOA = $totalUnits - $unitsWithSOA;
+
+            return response()->json([
+                'success' => true,
+                'total_units' => $totalUnits,
+                'units_with_soa' => $unitsWithSOA,
+                'units_without_soa' => $unitsWithoutSOA,
+                'all_generated' => $unitsWithoutSOA === 0
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to check SOA status', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to check SOA status'
+            ], 500);
+        }
+    }
+
+    /**
+     * Bulk generate SOA for units without SOA
+     */
+    public function bulkGenerateSOA(Request $request)
+    {
+        try {
+            $regenerate = $request->input('regenerate', false);
+            
+            if ($regenerate) {
+                // Get all units with owners for regeneration
+                $units = Unit::with(['users', 'attachments'])
+                    ->whereHas('users')
+                    ->get();
+
+                // Delete all existing SOAs
+                foreach ($units as $unit) {
+                    $existingSOAs = $unit->attachments()->where('type', 'soa')->get();
+                    foreach ($existingSOAs as $soa) {
+                        // Delete file from storage
+                        $propertyFolder = $unit->property->project_name;
+                        $unitFolder = $unit->unit;
+                        $filePath = "public/attachments/{$propertyFolder}/{$unitFolder}/{$soa->filename}";
+                        if (Storage::exists($filePath)) {
+                            Storage::delete($filePath);
+                        }
+                        // Delete database record
+                        $soa->delete();
+                    }
+                }
+
+                $unitIds = $units->pluck('id')->toArray();
+            } else {
+                // Get all units without SOA
+                $unitsWithoutSOA = Unit::with(['users', 'attachments'])
+                    ->whereDoesntHave('attachments', function ($query) {
+                        $query->where('type', 'soa');
+                    })
+                    ->whereHas('users') // Only units with owners
+                    ->get();
+
+                if ($unitsWithoutSOA->isEmpty()) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'All units already have SOA',
+                        'queued_count' => 0
+                    ], 200);
+                }
+
+                $unitIds = $unitsWithoutSOA->pluck('id')->toArray();
+            }
+
+            $adminName = $request->user()->full_name ?? 'System';
+
+            // Create batch tracking record
+            $batchId = \Illuminate\Support\Str::uuid()->toString();
+            $batch = \App\Models\SoaGenerationBatch::create([
+                'batch_id' => $batchId,
+                'total_soas' => count($unitIds),
+                'generated_count' => 0,
+                'failed_count' => 0,
+                'status' => 'processing',
+                'unit_ids' => $unitIds,
+                'initiated_by' => $adminName,
+                'started_at' => now()
+            ]);
+
+            // Dispatch jobs
+            foreach ($unitIds as $unitId) {
+                \App\Jobs\GenerateSOAJob::dispatch($unitId, $batchId, $adminName);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $regenerate 
+                    ? "Queued {$batch->total_soas} SOA(s) for regeneration" 
+                    : "Queued {$batch->total_soas} SOA(s) for generation",
+                'queued_count' => $batch->total_soas,
+                'batch_id' => $batchId
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to bulk generate SOA', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to queue SOA generation',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get SOA generation batch progress
+     */
+    public function getSOAGenerationProgress($batchId)
+    {
+        try {
+            $batch = \App\Models\SoaGenerationBatch::where('batch_id', $batchId)->first();
+
+            if (!$batch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'batch' => [
+                    'batch_id' => $batch->batch_id,
+                    'total_soas' => $batch->total_soas,
+                    'generated_count' => $batch->generated_count,
+                    'failed_count' => $batch->failed_count,
+                    'status' => $batch->status,
+                    'progress_percentage' => $batch->getProgressPercentage(),
+                    'started_at' => $batch->started_at,
+                    'completed_at' => $batch->completed_at
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to get SOA generation progress', [
+                'error' => $e->getMessage(),
+                'batch_id' => $batchId
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get SOA generation progress',
                 'error' => $e->getMessage()
             ], 500);
         }

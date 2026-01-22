@@ -82,11 +82,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('units')->group(function () {
         Route::get('/', [UnitController::class, 'index']);
-        Route::get('/{unit}', [UnitController::class, 'show']);
         Route::post('/', [UnitController::class, 'store']);
         Route::post('/bulk', [UnitController::class, 'bulkUpload']);
         Route::post('/bulk-upload-soa', [UnitController::class, 'bulkUploadSOA']);
         Route::post('/bulk-send-handover', [UnitController::class, 'bulkSendHandoverEmail']);
+        Route::get('/check-soa-status', [UnitController::class, 'checkSOAStatus']);
+        Route::post('/bulk-generate-soa', [UnitController::class, 'bulkGenerateSOA']);
+        Route::get('/handover-batch/{batchId}/progress', [UnitController::class, 'getHandoverEmailProgress']);
+        Route::get('/soa-batch/{batchId}/progress', [UnitController::class, 'getSOAGenerationProgress']);
+        Route::get('/{unit}', [UnitController::class, 'show']);
         Route::put('/{unit}', [UnitController::class, 'update']);
         Route::delete('/{unit}', [UnitController::class, 'destroy']);
         
@@ -112,6 +116,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/send-soa', [EmailController::class, 'sendSOAEmail']);
         Route::get('/logs', [EmailController::class, 'getAllEmailLogs']);
         Route::get('/logs/{userId}', [EmailController::class, 'getUserEmailLogs']);
+    });
+
+    Route::get('/properties', function () {
+        return response()->json(\App\Models\Property::all());
     });
 
 

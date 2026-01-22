@@ -18,16 +18,18 @@ class SendHandoverEmailJob implements ShouldQueue
 
     public $unitId;
     public $adminName;
+    public $batchId;
     public $tries = 3;
     public $timeout = 120;
 
     /**
      * Create a new job instance.
      */
-    public function __construct($unitId, $adminName = 'System')
+    public function __construct($unitId, $adminName = 'System', $batchId = null)
     {
         $this->unitId = $unitId;
         $this->adminName = $adminName;
+        $this->batchId = $batchId;
     }
 
     /**
@@ -164,17 +166,35 @@ class SendHandoverEmailJob implements ShouldQueue
                 'admin_name' => $this->adminName,
             ]);
 
+            // Update batch progress if batch_id provided
+            if ($this->batchId) {
+                $batch = \App\Models\HandoverEmailBatch::where('batch_id', $this->batchId)->first();
+                if ($batch) {
+                    $batch->incrementSent();
+                }
+            }
+
             Log::info('Handover email sent successfully', [
                 'unit_id' => $this->unitId,
                 'unit' => $unit->unit,
-                'recipients_count' => count($recipients)
+                'recipients_count' => count($recipients),
+                'batch_id' => $this->batchId
             ]);
 
         } catch (\Exception $e) {
+            // Update batch failed count if batch_id provided
+            if ($this->batchId) {
+                $batch = \App\Models\HandoverEmailBatch::where('batch_id', $this->batchId)->first();
+                if ($batch) {
+                    $batch->incrementFailed($this->unitId);
+                }
+            }
+
             Log::error('Failed to send handover email in job', [
                 'unit_id' => $this->unitId,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'batch_id' => $this->batchId
             ]);
             
             // Re-throw to allow job retry
@@ -187,9 +207,18 @@ class SendHandoverEmailJob implements ShouldQueue
      */
     public function failed(\Throwable $exception): void
     {
+        // Update batch failed count if batch_id provided
+        if ($this->batchId) {
+            $batch = \App\Models\HandoverEmailBatch::where('batch_id', $this->batchId)->first();
+            if ($batch) {
+                $batch->incrementFailed();
+            }
+        }
+
         Log::error('Handover email job failed after retries', [
             'unit_id' => $this->unitId,
-            'error' => $exception->getMessage()
+            'error' => $exception->getMessage(),
+            'batch_id' => $this->batchId
         ]);
     }
 }

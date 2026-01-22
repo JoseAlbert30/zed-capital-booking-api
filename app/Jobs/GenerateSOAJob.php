@@ -1,0 +1,170 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Models\Unit;
+use App\Models\UserAttachment;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use PDF;
+
+class GenerateSOAJob implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public $unitId;
+    public $batchId;
+    public $adminName;
+    public $tries = 3;
+    public $timeout = 120;
+
+    /**
+     * Create a new job instance.
+     */
+    public function __construct($unitId, $batchId = null, $adminName = 'System')
+    {
+        $this->unitId = $unitId;
+        $this->batchId = $batchId;
+        $this->adminName = $adminName;
+    }
+
+    /**
+     * Execute the job.
+     */
+    public function handle(): void
+    {
+        try {
+            $unit = Unit::with(['users', 'property'])->findOrFail($this->unitId);
+
+            // Delete existing SOA if it exists (for regeneration)
+            $existingSOAs = $unit->attachments()->where('type', 'soa')->get();
+            foreach ($existingSOAs as $existingSOA) {
+                // Delete file from storage
+                $propertyFolder = $unit->property->project_name;
+                $unitFolder = $unit->unit;
+                $filePath = "public/attachments/{$propertyFolder}/{$unitFolder}/{$existingSOA->filename}";
+                if (Storage::exists($filePath)) {
+                    Storage::delete($filePath);
+                }
+                // Delete database record
+                $existingSOA->delete();
+            }
+
+            // Get all owners
+            $owners = $unit->users;
+            if ($owners->isEmpty()) {
+                Log::warning('Skipping SOA generation - No owners found', [
+                    'unit_id' => $this->unitId,
+                    'unit' => $unit->unit
+                ]);
+                
+                if ($this->batchId) {
+                    $batch = \App\Models\SoaGenerationBatch::where('batch_id', $this->batchId)->first();
+                    if ($batch) {
+                        $batch->incrementFailed();
+                    }
+                }
+                return;
+            }
+
+            // Prepare owner names
+            $ownerNames = $owners->pluck('full_name')->toArray();
+
+            // Generate PDF
+            $pdf = PDF::loadView('soa-template', [
+                'unitNumber' => $unit->unit,
+                'owners' => $ownerNames,
+                'property' => $unit->property->project_name,
+                'generatedDate' => now()->format('d M Y')
+            ]);
+
+            // Define storage path
+            $propertyFolder = $unit->property->project_name;
+            $unitFolder = $unit->unit;
+            $filename = $unit->unit . '-soa.pdf';
+            $storagePath = "attachments/{$propertyFolder}/{$unitFolder}";
+            $fullPath = storage_path("app/public/{$storagePath}/{$filename}");
+
+            // Create directory if it doesn't exist
+            if (!file_exists(storage_path("app/public/{$storagePath}"))) {
+                mkdir(storage_path("app/public/{$storagePath}"), 0755, true);
+            }
+
+            // Save PDF
+            $pdf->save($fullPath);
+
+            // Create attachment record
+            UserAttachment::create([
+                'unit_id' => $unit->id,
+                'filename' => $filename,
+                'type' => 'soa',
+            ]);
+
+            // Add remark about SOA generation
+            $unit->remarks()->create([
+                'date' => now()->format('Y-m-d'),
+                'time' => now()->format('H:i:s'),
+                'event' => 'SOA generated for ' . count($ownerNames) . ' owner(s): ' . implode(', ', $ownerNames),
+                'type' => 'soa_generated',
+                'admin_name' => $this->adminName,
+            ]);
+
+            // Update batch progress
+            if ($this->batchId) {
+                $batch = \App\Models\SoaGenerationBatch::where('batch_id', $this->batchId)->first();
+                if ($batch) {
+                    $batch->incrementGenerated();
+                }
+            }
+
+            Log::info('SOA generated successfully', [
+                'unit_id' => $this->unitId,
+                'unit' => $unit->unit,
+                'filename' => $filename,
+                'batch_id' => $this->batchId
+            ]);
+
+        } catch (\Exception $e) {
+            // Update batch failed count
+            if ($this->batchId) {
+                $batch = \App\Models\SoaGenerationBatch::where('batch_id', $this->batchId)->first();
+                if ($batch) {
+                    $batch->incrementFailed();
+                }
+            }
+
+            Log::error('Failed to generate SOA', [
+                'unit_id' => $this->unitId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'batch_id' => $this->batchId
+            ]);
+            
+            throw $e;
+        }
+    }
+
+    /**
+     * Handle a job failure.
+     */
+    public function failed(\Throwable $exception): void
+    {
+        if ($this->batchId) {
+            $batch = \App\Models\SoaGenerationBatch::where('batch_id', $this->batchId)->first();
+            if ($batch) {
+                $batch->incrementFailed();
+            }
+        }
+
+        Log::error('SOA generation job failed after retries', [
+            'unit_id' => $this->unitId,
+            'error' => $exception->getMessage(),
+            'batch_id' => $this->batchId
+        ]);
+    }
+}
