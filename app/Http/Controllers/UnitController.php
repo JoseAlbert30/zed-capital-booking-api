@@ -568,7 +568,7 @@ class UnitController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to update payment status', [
                 'error' => $e->getMessage(),
-                'unit_id' => $id
+                'unit_id' => $unit
             ]);
 
             return response()->json([
@@ -617,7 +617,7 @@ class UnitController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to add remark', [
                 'error' => $e->getMessage(),
-                'unit_id' => $id
+                'unit_id' => $unit
             ]);
 
             return response()->json([
@@ -689,7 +689,7 @@ class UnitController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to send SOA email', [
                 'error' => $e->getMessage(),
-                'unit_id' => $id
+                'unit_id' => $unit
             ]);
 
             return response()->json([
@@ -898,7 +898,7 @@ class UnitController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to update mortgage status', [
                 'error' => $e->getMessage(),
-                'unit_id' => $id
+                'unit_id' => $unit
             ]);
 
             return response()->json([
@@ -1541,7 +1541,7 @@ class UnitController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to upload attachment', [
                 'error' => $e->getMessage(),
-                'unit_id' => $id
+                'unit_id' => $unit
             ]);
 
             return response()->json([
