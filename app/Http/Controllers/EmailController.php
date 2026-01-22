@@ -7,7 +7,6 @@ use App\Models\User;
 use App\Models\EmailLog;
 use App\Models\Remark;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
@@ -89,7 +88,6 @@ class EmailController extends Controller
                     $files = glob($storagePath . $pattern);
                     
                     if (empty($files)) {
-                        \Log::error("SOA file not found", [
                             'pattern' => $pattern,
                             'user' => $user->full_name,
                             'attachment_id' => $soaAttachment->id,
@@ -224,7 +222,6 @@ class EmailController extends Controller
                         'error' => $e->getMessage()
                     ];
                     
-                    Log::error('Failed to send email to ' . $user->email . ': ' . $e->getMessage());
                 }
             }
 
@@ -240,7 +237,6 @@ class EmailController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Email sending error: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Failed to send emails',
                 'error' => $e->getMessage()

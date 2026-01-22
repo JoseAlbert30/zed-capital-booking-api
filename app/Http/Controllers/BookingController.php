@@ -10,7 +10,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Remark;
@@ -140,12 +139,6 @@ class BookingController extends Controller
     {
         $user = $request->user();
 
-        Log::info('Booking store request received', [
-            'user_id' => $user->id,
-            'user_email' => $user->email,
-            'request_data' => $request->all()
-        ]);
-
         // Validate input
         $validator = Validator::make($request->all(), [
             'unit_id' => 'required|exists:units,id',
@@ -154,10 +147,6 @@ class BookingController extends Controller
         ]);
 
         if ($validator->fails()) {
-            Log::warning('Booking validation failed', [
-                'user_id' => $user->id,
-                'errors' => $validator->errors()
-            ]);
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
@@ -169,19 +158,8 @@ class BookingController extends Controller
 
         // Check if unit is eligible for booking
         if ($unit->payment_status !== 'fully_paid' || !$unit->handover_ready) {
-            Log::warning('Unit not eligible for booking', [
-                'user_id' => $user->id,
-                'unit_id' => $unit->id,
-                'payment_status' => $unit->payment_status,
-                'handover_ready' => $unit->handover_ready
-            ]);
             return response()->json(['message' => 'This unit is not eligible for booking yet. Payment must be completed and handover requirements fulfilled.'], 403);
         }
-
-        Log::info('Unit eligibility check passed', [
-            'user_id' => $user->id,
-            'unit_id' => $unit->id
-        ]);
 
         // Check if this unit already has a booking
         $existingBooking = Booking::where('unit_id', $request->unit_id)
@@ -190,13 +168,6 @@ class BookingController extends Controller
 
         if ($existingBooking) {
             $bookedBy = $existingBooking->user_id === $user->id ? 'You' : $existingBooking->user->full_name;
-            
-            Log::warning('Existing booking found for unit', [
-                'user_id' => $user->id,
-                'unit_id' => $request->unit_id,
-                'existing_booking_id' => $existingBooking->id,
-                'booked_by' => $bookedBy
-            ]);
             
             return response()->json([
                 'message' => "A booking already exists for this unit. Booked by: {$bookedBy}",
@@ -211,19 +182,8 @@ class BookingController extends Controller
             ->exists();
 
         if ($conflictExists) {
-            Log::warning('Time slot conflict', [
-                'user_id' => $user->id,
-                'date' => $request->booked_date,
-                'time' => $request->booked_time
-            ]);
             return response()->json(['message' => 'Time slot already booked'], 409);
         }
-
-        Log::info('Creating booking', [
-            'user_id' => $user->id,
-            'booked_date' => $request->booked_date,
-            'booked_time' => $request->booked_time
-        ]);
 
         // Create booking
         $booking = Booking::create([
@@ -231,12 +191,6 @@ class BookingController extends Controller
             'unit_id' => $request->unit_id,
             'booked_date' => $request->booked_date,
             'booked_time' => $request->booked_time,
-        ]);
-
-        Log::info('Booking created successfully', [
-            'booking_id' => $booking->id,
-            'user_id' => $user->id,
-            'unit_id' => $request->unit_id
         ]);
 
         // Add remark for booking creation to the unit
@@ -297,18 +251,7 @@ class BookingController extends Controller
                 'admin_name' => 'System',
             ]);
 
-            Log::info('Booking confirmation email sent', [
-                'booking_id' => $booking->id,
-                'user_id' => $user->id,
-                'recipients' => $allOwners->pluck('email')->toArray()
-            ]);
-
         } catch (\Exception $e) {
-            Log::error('Failed to send booking confirmation email', [
-                'booking_id' => $booking->id,
-                'user_id' => $user->id,
-                'error' => $e->getMessage()
-            ]);
             // Don't fail the booking if email fails
         }
 
@@ -436,16 +379,7 @@ class BookingController extends Controller
                 ]);
             }
 
-            Log::info('Booking rescheduling email sent', [
-                'booking_id' => $booking->id,
-                'recipients' => $allOwners->pluck('email')->toArray()
-            ]);
-
         } catch (\Exception $e) {
-            Log::error('Failed to send rescheduling email', [
-                'booking_id' => $booking->id,
-                'error' => $e->getMessage()
-            ]);
         }
 
         return response()->json([
@@ -534,16 +468,7 @@ class BookingController extends Controller
                 ]);
             }
 
-            Log::info('Booking cancellation email sent', [
-                'booking_date' => $bookedDate,
-                'recipients' => $allOwners->pluck('email')->toArray()
-            ]);
-
         } catch (\Exception $e) {
-            Log::error('Failed to send cancellation email', [
-                'booking_date' => $bookedDate,
-                'error' => $e->getMessage()
-            ]);
         }
         
         // Delete all bookings for co-owners with the same date and time
@@ -643,7 +568,6 @@ class BookingController extends Controller
                 'path' => $path,
             ]);
         } catch (\Exception $e) {
-            \Log::error('Handover file upload error: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to upload file'], 500);
         }
     }
@@ -706,7 +630,6 @@ class BookingController extends Controller
                 'message' => 'File deleted successfully',
             ]);
         } catch (\Exception $e) {
-            \Log::error('Handover file deletion error: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to delete file'], 500);
         }
     }
@@ -789,7 +712,6 @@ class BookingController extends Controller
                 'booking' => $booking->load('unit', 'user'),
             ]);
         } catch (\Exception $e) {
-            \Log::error('Handover completion error: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to complete handover'], 500);
         }
     }
@@ -897,7 +819,6 @@ class BookingController extends Controller
                 'defect' => $defect->load('creator'),
             ], 201);
         } catch (\Exception $e) {
-            \Log::error('Snagging defect creation error: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to create defect'], 500);
         }
     }
@@ -949,7 +870,6 @@ class BookingController extends Controller
                 'defect' => $defect->load('creator'),
             ]);
         } catch (\Exception $e) {
-            \Log::error('Snagging defect update error: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to update defect'], 500);
         }
     }
@@ -998,7 +918,6 @@ class BookingController extends Controller
                 'message' => 'Snagging defect deleted successfully',
             ]);
         } catch (\Exception $e) {
-            \Log::error('Snagging defect deletion error: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to delete defect'], 500);
         }
     }
@@ -1050,7 +969,6 @@ class BookingController extends Controller
                 ]);
             }
         } catch (\Exception $e) {
-            \Log::error('Failed to send congratulations email: ' . $e->getMessage());
             // Don't throw exception - handover should still complete even if email fails
         }
     }
@@ -1088,7 +1006,6 @@ class BookingController extends Controller
                 'part' => $part
             ]);
         } catch (\Exception $e) {
-            \Log::error('Failed to save declaration signatures: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Failed to save signatures'
             ], 500);
@@ -1225,7 +1142,6 @@ class BookingController extends Controller
                 'filename' => 'Declaration_' . $booking->id . '_' . now()->format('Ymd_His') . '.pdf'
             ]);
         } catch (\Exception $e) {
-            \Log::error('Failed to generate declaration: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Failed to generate declaration PDF',
                 'error' => $e->getMessage()
@@ -1306,7 +1222,6 @@ class BookingController extends Controller
                 'filename' => 'Handover_Checklist_' . $booking->id . '_' . now()->format('Ymd_His') . '.pdf'
             ]);
         } catch (\Exception $e) {
-            \Log::error('Failed to generate handover checklist: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Failed to generate handover checklist PDF',
                 'error' => $e->getMessage()

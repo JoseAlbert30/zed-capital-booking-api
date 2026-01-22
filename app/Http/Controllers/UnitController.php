@@ -7,7 +7,6 @@ use App\Models\Property;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -128,7 +127,6 @@ class UnitController extends Controller
                 'units' => $units
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to fetch units', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -160,7 +158,6 @@ class UnitController extends Controller
                 'unit' => $unit
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to fetch unit', [
                 'unit_id' => $id,
                 'error' => $e->getMessage()
             ]);
@@ -227,7 +224,6 @@ class UnitController extends Controller
                 'unit' => $unit
             ], 201);
         } catch (\Exception $e) {
-            Log::error('Failed to create unit', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'request' => $request->all()
@@ -402,7 +398,6 @@ class UnitController extends Controller
                 throw $e;
             }
         } catch (\Exception $e) {
-            Log::error('Failed to bulk upload units', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -450,7 +445,6 @@ class UnitController extends Controller
                 'unit' => $unit
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to update unit', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'unit_id' => $unit->id
@@ -485,7 +479,6 @@ class UnitController extends Controller
                 'message' => 'Unit deleted successfully'
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to delete unit', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'unit_id' => $unit->id
@@ -566,7 +559,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['attachments', 'users', 'remarks'])
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to update payment status', [
                 'error' => $e->getMessage(),
                 'unit_id' => $unit
             ]);
@@ -615,7 +607,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['remarks'])
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to add remark', [
                 'error' => $e->getMessage(),
                 'unit_id' => $unit
             ]);
@@ -687,7 +678,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['attachments', 'remarks'])
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to send SOA email', [
                 'error' => $e->getMessage(),
                 'unit_id' => $unit
             ]);
@@ -774,7 +764,6 @@ class UnitController extends Controller
                         'file' => $file->getClientOriginalName(),
                         'error' => $e->getMessage()
                     ];
-                    Log::error('Failed to upload SOA in bulk', [
                         'file' => $file->getClientOriginalName(),
                         'error' => $e->getMessage()
                     ]);
@@ -788,7 +777,6 @@ class UnitController extends Controller
                 'errors' => $errors
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to bulk upload SOA', [
                 'error' => $e->getMessage()
             ]);
 
@@ -851,7 +839,6 @@ class UnitController extends Controller
                 'developer_requirements' => $developerRequirementsWithStatus
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to get handover status', [
                 'error' => $e->getMessage(),
                 'unit_id' => $id
             ]);
@@ -896,7 +883,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh()
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to update mortgage status', [
                 'error' => $e->getMessage(),
                 'unit_id' => $unit
             ]);
@@ -1047,7 +1033,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['remarks', 'users', 'attachments'])
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to send handover email', [
                 'error' => $e->getMessage(),
                 'unit_id' => $unit,
                 'trace' => $e->getTraceAsString(),
@@ -1122,7 +1107,6 @@ class UnitController extends Controller
                         'unit_id' => $unitId,
                         'reason' => $e->getMessage()
                     ];
-                    Log::error('Failed to queue handover email', [
                         'unit_id' => $unitId,
                         'error' => $e->getMessage()
                     ]);
@@ -1161,7 +1145,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            Log::error('Failed to bulk send handover emails', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -1221,7 +1204,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            Log::error('Failed to get batch progress', [
                 'error' => $e->getMessage(),
                 'batch_id' => $batchId
             ]);
@@ -1255,7 +1237,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            Log::error('Failed to check SOA status', [
                 'error' => $e->getMessage()
             ]);
 
@@ -1347,7 +1328,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            Log::error('Failed to bulk generate SOA', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -1390,7 +1370,6 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            Log::error('Failed to get SOA generation progress', [
                 'error' => $e->getMessage(),
                 'batch_id' => $batchId
             ]);
@@ -1459,7 +1438,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['remarks'])
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to send booking link', [
                 'error' => $e->getMessage(),
                 'unit_id' => $id,
                 'trace' => $e->getTraceAsString()
@@ -1539,7 +1517,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['attachments', 'remarks'])
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to upload attachment', [
                 'error' => $e->getMessage(),
                 'unit_id' => $unit
             ]);
@@ -1605,7 +1582,6 @@ class UnitController extends Controller
                 'unit' => $unit->fresh(['attachments', 'remarks'])
             ], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to delete attachment', [
                 'error' => $e->getMessage(),
                 'unit_id' => $unitId,
                 'attachment_id' => $attachmentId
@@ -1680,7 +1656,6 @@ class UnitController extends Controller
                 'unit' => $unit
             ], 200);
         } catch (\Exception $e) {
-            \Log::error('Failed to validate handover requirements', [
                 'error' => $e->getMessage(),
                 'unit_id' => $id
             ]);
@@ -1732,7 +1707,6 @@ class UnitController extends Controller
             
             return $pdf->download($filename);
         } catch (\Exception $e) {
-            \Log::error('Service charge acknowledgement generation error: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to generate document'], 500);
         }
     }
@@ -1771,7 +1745,6 @@ class UnitController extends Controller
             
             return $pdf->download($filename);
         } catch (\Exception $e) {
-            \Log::error('Utilities guide generation error: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to generate utilities guide'], 500);
         }
     }
@@ -1823,7 +1796,6 @@ class UnitController extends Controller
             
             return $pdf->download($filename);
         } catch (\Exception $e) {
-            \Log::error('NOC generation error: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to generate NOC'], 500);
         }
     }
@@ -1882,7 +1854,6 @@ class UnitController extends Controller
                 'subject' => 'Handover Requirements - Unit ' . $unit->unit . ' - ' . $unit->property->project_name,
             ]);
         } catch (\Exception $e) {
-            \Log::error('Failed to preview developer requirements: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to load preview',
@@ -1917,7 +1888,6 @@ class UnitController extends Controller
                 return response()->json(['message' => 'No owner found for this unit'], 404);
             }
 
-            \Log::info('About to send email', [
                 'unit_id' => $unit->id,
                 'unit_number' => $unit->unit,
                 'property_name' => $unit->property->project_name,
@@ -1996,19 +1966,16 @@ class UnitController extends Controller
                         }
                         
                         if ($filePath && file_exists($filePath)) {
-                            \Log::info('Attaching file', ['filepath' => $filePath, 'filename' => $doc->filename]);
                             $message->attach($filePath, [
                                 'as' => $doc->filename,
                                 'mime' => mime_content_type($filePath)
                             ]);
                         } else {
-                            \Log::warning('File not found for attachment', [
                                 'filename' => $doc->filename,
                                 'tried_paths' => $possiblePaths
                             ]);
                         }
                     } catch (\Exception $e) {
-                        \Log::error('Failed to attach file', [
                             'file' => $doc->filename,
                             'error' => $e->getMessage()
                         ]);
@@ -2018,21 +1985,18 @@ class UnitController extends Controller
                 // Attach the NOC PDF for developer to sign
                 try {
                     if (file_exists($nocPath)) {
-                        \Log::info('Attaching NOC PDF', ['filepath' => $nocPath, 'filename' => $nocFilename]);
                         $message->attach($nocPath, [
                             'as' => $nocFilename,
                             'mime' => 'application/pdf'
                         ]);
                     }
                 } catch (\Exception $e) {
-                    \Log::error('Failed to attach NOC PDF', [
                         'file' => $nocFilename,
                         'error' => $e->getMessage()
                     ]);
                 }
             });
 
-            \Log::info('Email sent successfully');
             
             // Clean up temp NOC file
             if (file_exists($nocPath)) {
@@ -2053,7 +2017,6 @@ class UnitController extends Controller
                 'message' => 'Requirements sent to developer successfully'
             ]);
         } catch (\Exception $e) {
-            \Log::error('Failed to send requirements to developer: ' . $e->getMessage(), [
                 'exception' => $e,
                 'trace' => $e->getTraceAsString(),
                 'line' => $e->getLine(),

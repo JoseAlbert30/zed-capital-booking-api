@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -822,7 +821,6 @@ class UserController extends Controller
                 throw $e;
             }
         } catch (\Exception $e) {
-            Log::error('Failed to create user with unit', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'request' => $request->all()
@@ -1182,7 +1180,6 @@ class UserController extends Controller
                 throw $e;
             }
         } catch (\Exception $e) {
-            Log::error('Failed to bulk upload users', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
