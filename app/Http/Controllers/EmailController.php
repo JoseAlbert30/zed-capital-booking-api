@@ -88,11 +88,6 @@ class EmailController extends Controller
                     $files = glob($storagePath . $pattern);
                     
                     if (empty($files)) {
-                            'pattern' => $pattern,
-                            'user' => $user->full_name,
-                            'attachment_id' => $soaAttachment->id,
-                            'filename' => $soaAttachment->filename
-                        ]);
                         throw new \Exception("SOA file not found on server for {$user->full_name}. Please re-upload SOA document.");
                     }
                     
