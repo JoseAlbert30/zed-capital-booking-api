@@ -21,8 +21,19 @@ jobs:
             git fetch --all
             git reset --hard origin/main
             composer install --no-dev --optimize-autoloader
+            
+            # Ensure storage is linked
+            php artisan storage:link
+            
+            # Run migrations
             php artisan migrate --force
+            
+            # Cache configuration
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
+            
+            # Restart queue workers to pick up new code
+            php artisan queue:restart
+            
             sudo systemctl reload nginx

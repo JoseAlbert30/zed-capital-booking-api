@@ -46,20 +46,23 @@ class UserAttachment extends Model
     /**
      * Get the full URL for the file.
      */
-    /**
-     * Get the full URL for the file.
-     */
     public function getFullUrlAttribute(): string
     {
+        // Force HTTPS in production
+        $baseUrl = config('app.url');
+        if (config('app.env') === 'production') {
+            $baseUrl = str_replace('http://', 'https://', $baseUrl);
+        }
+        
         // For unit attachments, compute path from unit relationship
         if ($this->unit_id && $this->unit) {
             $folderPath = 'attachments/' . $this->unit->property->project_name . '/' . $this->unit->unit;
-            return url('storage/' . $folderPath . '/' . $this->filename);
+            return $baseUrl . '/storage/' . $folderPath . '/' . $this->filename;
         }
         
         // For user attachments (legacy), compute path from user_id
         if ($this->user_id) {
-            return url('/api/users/' . $this->user_id . '/attachments/' . $this->id);
+            return $baseUrl . '/api/users/' . $this->user_id . '/attachments/' . $this->id;
         }
         
         return '';
