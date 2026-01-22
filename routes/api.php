@@ -17,6 +17,9 @@ Route::prefix('auth')->group(function () {
 // Public route for viewing attachments (no auth required for file viewing)
 Route::get('/users/{user}/attachments/{attachment}', [UserController::class, 'viewAttachment']);
 
+// Public route for utilities guide (no auth required for email links)
+Route::get('/public/units/{unit}/utilities-guide', [UnitController::class, 'generateUtilitiesGuide'])->name('public.utilities-guide');
+
 // Serve storage files with CORS (no auth required for PDF templates)
 Route::get('/storage/{path}', function ($path) {
     // Decode the URL-encoded path to handle spaces and special characters
@@ -99,6 +102,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{unit}/upload-attachment', [UnitController::class, 'uploadAttachment']);
         Route::delete('/{unit}/attachments/{attachment}', [UnitController::class, 'deleteAttachment']);
         Route::get('/{unit}/service-charge-acknowledgement', [UnitController::class, 'generateServiceChargeAcknowledgement']);
+        Route::get('/{unit}/utilities-guide', [UnitController::class, 'generateUtilitiesGuide']);
         Route::get('/{unit}/noc-handover', [UnitController::class, 'generateNOC']);
         Route::get('/{unit}/developer-requirements-preview', [UnitController::class, 'previewDeveloperRequirements']);
         Route::post('/{unit}/send-to-developer', [UnitController::class, 'sendRequirementsToDeveloper']);

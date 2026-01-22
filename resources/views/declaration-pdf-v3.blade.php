@@ -586,7 +586,7 @@
 
         <div class="spacer-18"></div>
         <div style="font-size: 9pt;">
-            I hereby confirm that I am in receipt of the keys for the above-mentioned unit after the defects in the unit have been rectified.
+           I hereby confirm that I have read and understood the declaration of adherence and acknowledgement letter and received the keys for the above-mentioned unit.
         </div>
 
         <div class="spacer-18"></div>

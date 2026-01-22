@@ -80,13 +80,42 @@ class SendHandoverEmailJob implements ShouldQueue
             ]);
             $serviceChargePdfContent = $serviceChargePdf->output();
 
+            // Generate Utilities Registration Guide PDF with logos
+            $vieraLogoPath = public_path('storage/letterheads/viera-black.png');
+            $vantageLogoPath = public_path('storage/letterheads/vantage-black.png');
+            
+            $vieraLogo = file_exists($vieraLogoPath) 
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vieraLogoPath))
+                : '';
+            $vantageLogo = file_exists($vantageLogoPath)
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($vantageLogoPath))
+                : '';
+
+            $utilitiesGuidePdf = PDF::loadView('utilities-registration-guide', [
+                'dewaPremiseNumber' => $unit->dewa_premise_number ?? 'N/A',
+                'logos' => [
+                    'left' => $vieraLogo,
+                    'right' => $vantageLogo,
+                ]
+            ]);
+            $utilitiesGuidePdfContent = $utilitiesGuidePdf->output();
+
+            // Save utilities guide PDF to storage
+            $utilitiesGuideDir = storage_path('app/public/attachments/' . $unit->property->project_name . '/' . $unit->unit);
+            if (!file_exists($utilitiesGuideDir)) {
+                mkdir($utilitiesGuideDir, 0755, true);
+            }
+            $utilitiesGuideFilename = 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf';
+            $utilitiesGuidePath = $utilitiesGuideDir . '/' . $utilitiesGuideFilename;
+            file_put_contents($utilitiesGuidePath, $utilitiesGuidePdfContent);
+
             // Send email to all owners with SOA attachments
             Mail::send('emails.handover-notice', [
                 'firstName' => $firstName,
                 'soaUrl' => $soaUrl,
                 'unit' => $unit,
                 'property' => $unit->property,
-            ], function($message) use ($recipients, $unit, $soaAttachments, $serviceChargePdfContent) {
+            ], function($message) use ($recipients, $unit, $soaAttachments, $serviceChargePdfContent, $utilitiesGuidePdfContent) {
                 $message->to($recipients)
                     ->subject('Handover Notice - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 
@@ -106,20 +135,18 @@ class SendHandoverEmailJob implements ShouldQueue
                     'mime' => 'application/pdf'
                 ]);
 
-                // Attach handover notice PDFs from project-specific folder
-                $projectSlug = strtolower(str_replace(' ', '-', $unit->property->project_name));
-                $handoverDocumentsPath = storage_path('app/public/handover-notice-attachments/' . $projectSlug);
-                
-                if (is_dir($handoverDocumentsPath)) {
-                    $files = glob($handoverDocumentsPath . '/*.pdf');
-                    foreach ($files as $file) {
-                        if (file_exists($file)) {
-                            $message->attach($file, [
-                                'as' => basename($file),
-                                'mime' => 'application/pdf'
-                            ]);
-                        }
-                    }
+                // Attach Utilities Registration Guide PDF
+                $message->attachData($utilitiesGuidePdfContent, 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf', [
+                    'mime' => 'application/pdf'
+                ]);
+
+                // Attach Escrow Account PDF
+                $escrowPath = storage_path('app/public/handover-notice-attachments/viera-residences/Viera Residences - Escrow Acc.pdf');
+                if (file_exists($escrowPath)) {
+                    $message->attach($escrowPath, [
+                        'as' => 'Viera Residences - Escrow Acc.pdf',
+                        'mime' => 'application/pdf'
+                    ]);
                 }
             });
 

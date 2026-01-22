@@ -123,11 +123,11 @@
             <p>Kindly arrange settlement of the final amount due in accordance with the Sale and Purchase Agreement within <strong>30 calendar days</strong> from the date of this notice.</p>
 
             <p><strong>Your Statement of Account is attached to this email and can also be <a href="{{ $soaUrl }}" class="soa-link">viewed online here</a>.</strong></p>
-            <p>Please find the escrow account details attached and email the proof of payment to <strong>finance@zedcapital.ae</strong>.</p>
+            <p>Please find the escrow account details attached or <a href="{{ url('storage/handover-notice-attachments/viera-residences/Viera Residences - Escrow Acc.pdf') }}" class="soa-link">click here to download the escrow account details</a>. Email the proof of payment to <strong>finance@zedcapital.ae</strong>.</p>
 
             <p><br /></p>
             <h1>2. Utilities Connections, Registrations &amp; Service Charge</h1>
-            <p>To proceed with the handover, please complete the <strong>DEWA</strong> and <strong>Chilled Water / AC (Zenner)</strong> registrations as per the steps mentioned in the <strong>attached guidelines PDF</strong>.</p>
+            <p>To proceed with the handover, please complete the <strong>DEWA</strong> and <strong>Chilled Water / AC (Zenner)</strong> registrations as per the steps mentioned in the <strong>attached guidelines PDF</strong> or <a href="{{ url('storage/attachments/' . $unit->property->project_name . '/' . $unit->unit . '/Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf') }}" class="soa-link">click here to download the utilities registration guide</a>.</p>
 
             <p>Once completed, kindly submit the following documents to <strong>vantage@zedcapital.ae</strong>:</p>
             <ul>
