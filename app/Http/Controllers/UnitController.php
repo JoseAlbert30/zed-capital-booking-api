@@ -923,7 +923,7 @@ class UnitController extends Controller
             ]);
             $utilitiesGuidePdfContent = $utilitiesGuidePdf->output();
 
-            // Save utilities guide PDF to storage using Laravel Storage
+            // Save utilities guide PDF to storage using Laravel Storage (overwrite if exists)
             $utilitiesGuideFilename = 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf';
             $storagePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $utilitiesGuideFilename;
             \Storage::disk('public')->put($storagePath, $utilitiesGuidePdfContent);
@@ -934,7 +934,7 @@ class UnitController extends Controller
                 'soaUrl' => $soaUrl,
                 'unit' => $unit,
                 'property' => $unit->property,
-            ], function($message) use ($recipients, $unit, $soaAttachments, $serviceChargePdfContent, $utilitiesGuidePdfContent) {
+            ], function($message) use ($recipients, $unit, $soaAttachments, $serviceChargePdfContent, $storagePath) {
                 $message->to($recipients)
                     ->subject('Handover Notice - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 
@@ -954,10 +954,14 @@ class UnitController extends Controller
                     'mime' => 'application/pdf'
                 ]);
 
-                // Attach Utilities Registration Guide PDF
-                $message->attachData($utilitiesGuidePdfContent, 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf', [
-                    'mime' => 'application/pdf'
-                ]);
+                // Attach Utilities Registration Guide PDF from storage
+                $utilitiesGuidePath = storage_path('app/public/' . $storagePath);
+                if (file_exists($utilitiesGuidePath)) {
+                    $message->attach($utilitiesGuidePath, [
+                        'as' => 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf',
+                        'mime' => 'application/pdf'
+                    ]);
+                }
 
                 // Attach Escrow Account PDF
                 $escrowPath = storage_path('app/public/handover-notice-attachments/viera-residences/Viera Residences - Escrow Acc.pdf');
