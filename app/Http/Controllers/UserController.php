@@ -881,13 +881,20 @@ class UserController extends Controller
 
             try {
                 if ($extension === 'csv' || $extension === 'txt') {
+                    Log::info('Starting CSV parsing');
                     // Parse CSV
                     $handle = fopen($file->getRealPath(), 'r');
                     
+                    if (!$handle) {
+                        throw new \Exception('Failed to open CSV file');
+                    }
+                    
                     // Skip first header row
                     $header1 = fgetcsv($handle);
+                    Log::info('CSV Header 1', ['header' => $header1]);
                     // Skip second header row
                     $header2 = fgetcsv($handle);
+                    Log::info('CSV Header 2', ['header' => $header2]);
                     
                     $batchCount = 0;
                     $batchSize = 50; // Process in batches of 50 rows
@@ -1054,9 +1061,10 @@ class UserController extends Controller
                     fclose($handle);
                 } elseif ($extension === 'xlsx' || $extension === 'xls') {
                     // Parse Excel file - process in memory-efficient way
-                    Log::info('Processing Excel file');
+                    Log::info('Starting Excel parsing');
                     
                     $data = Excel::toArray([], $file);
+                    Log::info('Excel data loaded', ['sheets' => count($data), 'rows' => isset($data[0]) ? count($data[0]) : 0]);
                     
                     if (empty($data) || empty($data[0])) {
                         return response()->json([
@@ -1069,6 +1077,8 @@ class UserController extends Controller
                     // Skip first 2 header rows
                     array_shift($rows);
                     array_shift($rows);
+                    
+                    Log::info('Excel rows to process', ['count' => count($rows)]);
                     
                     $batchCount = 0;
                     $batchSize = 50;
@@ -1101,6 +1111,12 @@ class UserController extends Controller
                             $buyer2Mobile = isset($row[10]) ? trim($row[10]) : '';
                             $buyer2Email = isset($row[11]) ? trim($row[11]) : '';
                             
+                            Log::info("Processing Excel row {$results['total']}", [
+                                'unit' => $unitNumber,
+                                'buyer1' => $buyer1Name,
+                                'buyer1_email' => $buyer1Email,
+                                'buyer1_mobile' => $buyer1Mobile
+                            ]);
                             // Skip if no buyers (Available/Blocked status)
                             if (empty($buyer1Name) && empty($buyer1Email)) {
                                 continue;
@@ -1239,7 +1255,12 @@ class UserController extends Controller
                     ], 400);
                 }
 
-                Log::info('Bulk upload completed', $results);
+                Log::info('Bulk upload completed successfully', [
+                    'total' => $results['total'],
+                    'created' => $results['created'],
+                    'skipped' => $results['skipped'],
+                    'error_count' => count($results['errors'])
+                ]);
 
                 return response()->json([
                     'success' => true,
