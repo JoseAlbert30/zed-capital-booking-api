@@ -45,6 +45,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [UserController::class, 'show']);
         Route::post('/by-email', [UserController::class, 'getUserByEmail']);
         Route::post('/create-with-unit', [UserController::class, 'createWithUnit']);
+        Route::get('/test-bulk-upload', [UserController::class, 'testBulkUpload']);
         Route::post('/bulk', [UserController::class, 'bulkUpload']);
         Route::put('/{user}/payment-status', [UserController::class, 'updatePaymentStatus']);
         Route::post('/{user}/regenerate-password', [UserController::class, 'regeneratePassword']);

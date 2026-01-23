@@ -831,6 +831,21 @@ class UserController extends Controller
     }
 
     /**
+     * Test endpoint to verify deployment and logging
+     */
+    public function testBulkUpload(Request $request): JsonResponse
+    {
+        Log::info('TEST ENDPOINT HIT - Bulk upload test started');
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Test endpoint working',
+            'timestamp' => now()->toDateTimeString(),
+            'version' => 'v1.0.34'
+        ]);
+    }
+
+    /**
      * Bulk upload users from CSV/Excel file.
      * Expected CSV format: full_name, email, mobile_number, unit_number, property_name, is_primary
      */
@@ -841,6 +856,12 @@ class UserController extends Controller
         set_time_limit(300); // 5 minutes
 
         try {
+            Log::info('=== BULK UPLOAD STARTED v1.0.34 ===', [
+                'timestamp' => now()->toDateTimeString(),
+                'has_file' => $request->hasFile('file'),
+                'property_id' => $request->property_id
+            ]);
+            
             $validator = Validator::make($request->all(), [
                 'property_id' => 'required|exists:properties,id',
                 'file' => 'required|file|mimes:csv,txt,xlsx|max:20480' // 20MB max
