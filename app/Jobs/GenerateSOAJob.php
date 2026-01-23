@@ -47,9 +47,9 @@ class GenerateSOAJob implements ShouldQueue
                 // Delete file from storage
                 $propertyFolder = $unit->property->project_name;
                 $unitFolder = $unit->unit;
-                $filePath = "public/attachments/{$propertyFolder}/{$unitFolder}/{$existingSOA->filename}";
-                if (Storage::exists($filePath)) {
-                    Storage::delete($filePath);
+                $filePath = "attachments/{$propertyFolder}/{$unitFolder}/{$existingSOA->filename}";
+                if (Storage::disk('public')->exists($filePath)) {
+                    Storage::disk('public')->delete($filePath);
                 }
                 // Delete database record
                 $existingSOA->delete();
@@ -75,12 +75,12 @@ class GenerateSOAJob implements ShouldQueue
             $vieraLogo = '';
             $vantageLogo = '';
             
-            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
-                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            if (Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(Storage::disk('public')->get('letterheads/viera-black.png'));
             }
             
-            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
-                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            if (Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
 
             // Generate PDF with new template
@@ -101,7 +101,7 @@ class GenerateSOAJob implements ShouldQueue
             $storagePath = "attachments/{$propertyFolder}/{$unitFolder}/{$filename}";
 
             // Save PDF using Storage facade
-            \Storage::disk('public')->put($storagePath, $pdf->output());
+            Storage::disk('public')->put($storagePath, $pdf->output());
 
             // Create attachment record
             UserAttachment::create([
