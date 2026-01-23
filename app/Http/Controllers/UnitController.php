@@ -1469,6 +1469,11 @@ class UnitController extends Controller
      */
     public function bulkGenerateSOA(Request $request)
     {
+        \Log::info("=== BULK SOA GENERATION STARTED v1.0.37 ===", [
+            'regenerate' => $request->input('regenerate', false),
+            'user' => $request->user()->full_name ?? 'Unknown'
+        ]);
+        
         try {
             $regenerate = $request->input('regenerate', false);
             
@@ -1517,6 +1522,11 @@ class UnitController extends Controller
 
             $adminName = $request->user()->full_name ?? 'System';
 
+            \Log::info("Creating batch for SOA generation", [
+                'unit_count' => count($unitIds),
+                'admin_name' => $adminName
+            ]);
+
             // Create batch tracking record
             $batchId = \Illuminate\Support\Str::uuid()->toString();
             $batch = \App\Models\SoaGenerationBatch::create([
@@ -1530,10 +1540,25 @@ class UnitController extends Controller
                 'started_at' => now()
             ]);
 
+            \Log::info("Batch created, dispatching jobs", [
+                'batch_id' => $batchId,
+                'total_jobs' => count($unitIds)
+            ]);
+
             // Dispatch jobs
-            foreach ($unitIds as $unitId) {
+            foreach ($unitIds as $index => $unitId) {
+                \Log::info("Dispatching SOA job", [
+                    'job_number' => $index + 1,
+                    'unit_id' => $unitId,
+                    'batch_id' => $batchId
+                ]);
                 \App\Jobs\GenerateSOAJob::dispatch($unitId, $batchId, $adminName);
             }
+
+            \Log::info("All jobs dispatched successfully", [
+                'batch_id' => $batchId,
+                'total_dispatched' => count($unitIds)
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -1545,6 +1570,13 @@ class UnitController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
+
+            \Log::error("=== BULK SOA GENERATION FAILED ===", [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
             return response()->json([
                 'success' => false,
