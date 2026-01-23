@@ -2223,6 +2223,82 @@ class UnitController extends Controller
     }
 
     /**
+     * Download all SOAs as a zip file
+     */
+    public function downloadAllSOAs(Request $request)
+    {
+        try {
+            // Get all units with SOA attachments
+            $units = Unit::with(['property', 'attachments' => function($query) {
+                $query->where('type', 'soa');
+            }])->whereHas('attachments', function($query) {
+                $query->where('type', 'soa');
+            })->get();
+
+            if ($units->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No SOA files found'
+                ], 404);
+            }
+
+            // Create a temporary zip file
+            $zipFileName = 'all-soas-' . now()->format('Y-m-d-His') . '.zip';
+            $zipFilePath = storage_path('app/temp/' . $zipFileName);
+            
+            // Create temp directory if it doesn't exist
+            if (!file_exists(storage_path('app/temp'))) {
+                mkdir(storage_path('app/temp'), 0755, true);
+            }
+
+            $zip = new \ZipArchive();
+            if ($zip->open($zipFilePath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== TRUE) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Could not create zip file'
+                ], 500);
+            }
+
+            $filesAdded = 0;
+            foreach ($units as $unit) {
+                $soaAttachment = $unit->attachments->first();
+                if ($soaAttachment) {
+                    $propertyFolder = $unit->property->project_name;
+                    $unitFolder = $unit->unit;
+                    $filePath = "attachments/{$propertyFolder}/{$unitFolder}/{$soaAttachment->filename}";
+                    
+                    $fullPath = storage_path('app/public/' . $filePath);
+                    
+                    if (file_exists($fullPath)) {
+                        // Add file to zip with project name prefix
+                        $zipName = "{$propertyFolder}/{$soaAttachment->filename}";
+                        $zip->addFile($fullPath, $zipName);
+                        $filesAdded++;
+                    }
+                }
+            }
+
+            $zip->close();
+
+            if ($filesAdded === 0) {
+                unlink($zipFilePath);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No SOA files could be found on server'
+                ], 404);
+            }
+
+            return response()->download($zipFilePath, $zipFileName)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create zip file',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Parse currency value from CSV (removes commas, quotes, spaces)
      */
     private function parseCurrencyValue($value)

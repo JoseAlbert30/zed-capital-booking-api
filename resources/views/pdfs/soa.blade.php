@@ -6,37 +6,37 @@
     <title>Statement of Account - Unit {{ $unit->unit }}</title>
     <style>
         @page {
-            margin: 110px 40px 85px 40px;
+            margin: 90px 40px 70px 40px;
         }
 
         body {
             font-family: Arial, sans-serif;
-            font-size: 10pt;
+            font-size: 9pt;
             color: #111;
-            line-height: 1.3;
+            line-height: 1.2;
         }
 
         .header {
             position: fixed;
-            top: -85px;
+            top: -70px;
             left: 0;
             right: 0;
-            height: 75px;
+            height: 65px;
         }
 
         .footer {
             position: fixed;
-            bottom: -65px;
+            bottom: -55px;
             left: 0;
             right: 0;
-            height: 55px;
+            height: 45px;
             color: #fff;
         }
 
         .footer-bar {
             background: #111;
-            height: 55px;
-            padding: 10px 14px;
+            height: 45px;
+            padding: 8px 12px;
         }
 
         .brand-row {
@@ -65,27 +65,27 @@
         }
 
         h1 {
-            font-size: 16pt;
+            font-size: 14pt;
             font-weight: 600;
-            margin: 0 0 10px 0;
+            margin: 0 0 5px 0;
             color: #111;
             text-transform: uppercase;
         }
 
         .document-subtitle {
-            font-size: 11pt;
+            font-size: 10pt;
             font-weight: 500;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
         }
         
         .info-section {
-            margin-bottom: 25px;
+            margin-bottom: 8px;
         }
         
         .info-row {
             display: table;
             width: 100%;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
         
         .info-label {
@@ -101,10 +101,10 @@
         }
         
         .section-title {
-            font-size: 12pt;
+            font-size: 11pt;
             font-weight: 600;
-            margin: 20px 0 10px 0;
-            padding: 8px 0;
+            margin: 12px 0 6px 0;
+            padding: 5px 0;
             border-bottom: 2px solid #111;
             text-transform: uppercase;
         }
@@ -112,23 +112,23 @@
         .payment-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 15px 0;
+            margin: 8px 0;
         }
         
         .payment-table th {
             background-color: #f5f5f5;
             border: 1px solid #ddd;
-            padding: 10px;
+            padding: 6px;
             text-align: left;
             font-weight: 600;
-            font-size: 9pt;
+            font-size: 8pt;
             text-transform: uppercase;
         }
         
         .payment-table td {
             border: 1px solid #ddd;
-            padding: 8px;
-            font-size: 10pt;
+            padding: 5px;
+            font-size: 9pt;
         }
         
         .payment-table tr:nth-child(even) {
@@ -157,21 +157,21 @@
         .summary-box {
             background-color: #f9f9f9;
             border: 2px solid #333;
-            padding: 15px;
-            margin: 20px 0;
+            padding: 8px;
+            margin: 8px 0;
         }
         
         .summary-row {
             display: table;
             width: 100%;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
         
         .summary-label {
             display: table-cell;
             width: 70%;
             font-weight: 600;
-            font-size: 11pt;
+            font-size: 10pt;
         }
         
         .summary-amount {
@@ -179,26 +179,26 @@
             width: 30%;
             text-align: right;
             font-weight: 600;
-            font-size: 11pt;
+            font-size: 10pt;
         }
         
         .notes {
-            margin-top: 30px;
-            font-size: 9pt;
+            margin-top: 10px;
+            font-size: 8pt;
         }
         
         .notes-title {
             font-weight: 600;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
         }
         
         ul {
-            margin: 8px 0;
-            padding-left: 25px;
+            margin: 4px 0;
+            padding-left: 20px;
         }
         
         li {
-            margin-bottom: 6px;
+            margin-bottom: 3px;
         }
 
         strong {
@@ -256,7 +256,7 @@
     
     <h1>STATEMENT OF ACCOUNT</h1>
     <p class="document-subtitle">{{ $property->project_name }}</p>
-    <p style="font-size: 9pt; color: #666; margin-bottom: 20px;">Generated: {{ date('d M Y, H:i') }}</p>
+    <p style="font-size: 9pt; color: #666; margin-bottom: 6px;">Generated: {{ date('d M Y') }}</p>
 
     <div class="info-section">
         <div class="section-title">Property & Client Information</div>
@@ -405,7 +405,7 @@
 
     <div class="notes">
         <div class="notes-title">Important Notes:</div>
-        <ul style="margin-left: 20px; margin-top: 5px;">
+        <ul style="margin-left: 20px; margin-top: 3px;">
             <li>All amounts are in UAE Dirhams (AED)</li>
             <li>This is an automatically generated statement</li>
             <li>Please retain this document for your records</li>
@@ -413,6 +413,12 @@
             <li><strong>Outstanding balance must be cleared before handover</strong></li>
             @endif
         </ul>
+    </div>
+
+    <div style="margin-top: 25px; margin-bottom: 50px; padding: 8px 12px; background-color: #f9f9f9; border-left: 4px solid #111; font-size: 8pt;">
+        <p style="margin: 0; line-height: 1.4;">
+            <strong>Disclaimer:</strong> This Statement of Account does not reflect applicable late payment fees. If any, the amount will be communicated upon the full settlement and clearance of all outstanding balances and according to the SPA terms and conditions.
+        </p>
     </div>
 
 </body>

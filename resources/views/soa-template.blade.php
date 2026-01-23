@@ -105,6 +105,10 @@
         Additional SOA details will be added here in future updates
     </div>
 
+    <div class="section" style="margin-top: 40px; padding: 15px; background: #f9f9f9; border-left: 4px solid #0066cc;">
+        <p style="margin: 0; font-size: 13px; color: #555;"><strong>Disclaimer:</strong> This Statement of Account does not reflect applicable late payment fees. If any, the amount will be communicated upon the full settlement and clearance of all outstanding balances and according to the SPA terms and conditions.</p>
+    </div>
+
     <div class="footer">
         <p>This is a computer-generated document. No signature is required.</p>
         <p>For inquiries, please contact finance@zedcapital.ae</p>

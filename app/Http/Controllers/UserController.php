@@ -836,10 +836,14 @@ class UserController extends Controller
      */
     public function bulkUpload(Request $request): JsonResponse
     {
+        // Increase memory limit and execution time for large files
+        ini_set('memory_limit', '512M');
+        set_time_limit(300); // 5 minutes
+
         try {
             $validator = Validator::make($request->all(), [
                 'property_id' => 'required|exists:properties,id',
-                'file' => 'required|file|mimes:csv,txt,xlsx|max:10240' // 10MB max
+                'file' => 'required|file|mimes:csv,txt,xlsx|max:20480' // 20MB max
             ]);
 
             if ($validator->fails()) {
@@ -853,6 +857,12 @@ class UserController extends Controller
             $file = $request->file('file');
             $extension = $file->getClientOriginalExtension();
 
+            Log::info('Bulk upload started', [
+                'property_id' => $request->property_id,
+                'file_size' => $file->getSize(),
+                'extension' => $extension
+            ]);
+
             $results = [
                 'total' => 0,
                 'created' => 0,
@@ -860,18 +870,16 @@ class UserController extends Controller
                 'errors' => []
             ];
 
-            DB::beginTransaction();
+            // Get property to use building name
+            $property = \App\Models\Property::find($request->property_id);
+            if (!$property) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Property not found'
+                ], 404);
+            }
 
             try {
-                // Get property to use building name
-                $property = \App\Models\Property::find($request->property_id);
-                if (!$property) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Property not found'
-                    ], 404);
-                }
-                
                 if ($extension === 'csv' || $extension === 'txt') {
                     // Parse CSV
                     $handle = fopen($file->getRealPath(), 'r');
@@ -881,139 +889,169 @@ class UserController extends Controller
                     // Skip second header row
                     $header2 = fgetcsv($handle);
                     
+                    $batchCount = 0;
+                    $batchSize = 50; // Process in batches of 50 rows
+                    
+                    DB::beginTransaction();
+                    
                     while (($row = fgetcsv($handle)) !== false) {
-                        $results['total']++;
-                        
-                        // Skip empty rows
-                        if (empty(array_filter($row))) {
-                            continue;
-                        }
-                        
-                        // Expected format: S.NO, Unit No, DEWA Premise No, Status, Buyer 1 Name, Passport, Contact, Email, Buyer 2 Name, Passport, Contact, Email
-                        if (count($row) < 12) {
-                            $results['errors'][] = "Row {$results['total']}: Invalid format - expected 12 columns";
-                            $results['skipped']++;
-                            continue;
-                        }
-
-                        $unitNumber = trim($row[1]);
-                        $dewaPremiseNumber = trim($row[2]);
-                        $status = trim($row[3]);
-                        $buyer1Name = trim($row[4]);
-                        $buyer1Email = trim($row[7]);
-                        $buyer2Name = isset($row[8]) ? trim($row[8]) : '';
-                        $buyer2Email = isset($row[11]) ? trim($row[11]) : '';
-                        
-                        // Skip if no buyers (Available/Blocked status)
-                        if (empty($buyer1Name) && empty($buyer1Email)) {
-                            continue;
-                        }
-
-                        // Extract floor from unit number (first digit(s))
-                        $floor = '';
-                        if (strlen($unitNumber) >= 2) {
-                            $floor = substr($unitNumber, 0, -2); // All digits except last 2
-                        }
-
-                        // Find or create unit
-                        $unit = \App\Models\Unit::where('property_id', $request->property_id)
-                            ->where('unit', $unitNumber)
-                            ->first();
-
-                        if (!$unit) {
-                            // Create unit if it doesn't exist
-                            $unit = \App\Models\Unit::create([
-                                'property_id' => $request->property_id,
-                                'unit' => $unitNumber,
-                                'floor' => $floor,
-                                'building' => $property->project_name,
-                                'dewa_premise_number' => $dewaPremiseNumber,
-                                'status' => 'unclaimed'
-                            ]);
-                        } else {
-                            // Update DEWA premise number, floor, and building if unit exists
-                            $unit->update([
-                                'dewa_premise_number' => $dewaPremiseNumber,
-                                'floor' => $floor,
-                                'building' => $property->project_name
-                            ]);
-                        }
-
-                        // Process Buyer 1
-                        if (!empty($buyer1Name) && !empty($buyer1Email)) {
-                            // Validate email format
-                            if (!filter_var($buyer1Email, FILTER_VALIDATE_EMAIL)) {
-                                $results['errors'][] = "Row {$results['total']}: Invalid buyer 1 email format";
+                        try {
+                            $results['total']++;
+                            
+                            // Skip empty rows
+                            if (empty(array_filter($row))) {
+                                continue;
+                            }
+                            
+                            // Expected format: S.NO, Unit No, DEWA Premise No, Status, Buyer 1 Name, Passport, Contact, Email, Buyer 2 Name, Passport, Contact, Email
+                            if (count($row) < 12) {
+                                $results['errors'][] = "Row {$results['total']}: Invalid format - expected 12 columns";
                                 $results['skipped']++;
                                 continue;
                             }
 
-                            // Check if user already exists
-                            $existingUser = User::where('email', $buyer1Email)->first();
-                            if (!$existingUser) {
-                                // Generate random password
-                                $password = Str::random(12);
+                            $unitNumber = trim($row[1]);
+                            $dewaPremiseNumber = trim($row[2]);
+                            $status = trim($row[3]);
+                            $buyer1Name = trim($row[4]);
+                            $buyer1Email = trim($row[7]);
+                            $buyer2Name = isset($row[8]) ? trim($row[8]) : '';
+                            $buyer2Email = isset($row[11]) ? trim($row[11]) : '';
+                            
+                            // Skip if no buyers (Available/Blocked status)
+                            if (empty($buyer1Name) && empty($buyer1Email)) {
+                                continue;
+                            }
 
-                                // Create user
-                                $user = User::create([
-                                    'full_name' => $buyer1Name,
-                                    'email' => $buyer1Email,
-                                    'password' => Hash::make($password),
+                            // Extract floor from unit number (first digit(s))
+                            $floor = '';
+                            if (strlen($unitNumber) >= 2) {
+                                $floor = substr($unitNumber, 0, -2); // All digits except last 2
+                            }
+
+                            // Find or create unit
+                            $unit = \App\Models\Unit::where('property_id', $request->property_id)
+                                ->where('unit', $unitNumber)
+                                ->first();
+
+                            if (!$unit) {
+                                // Create unit if it doesn't exist
+                                $unit = \App\Models\Unit::create([
+                                    'property_id' => $request->property_id,
+                                    'unit' => $unitNumber,
+                                    'floor' => $floor,
+                                    'building' => $property->project_name,
+                                    'dewa_premise_number' => $dewaPremiseNumber,
+                                    'status' => 'unclaimed'
                                 ]);
-
-                                // Assign user to unit as primary
-                                $user->units()->attach($unit->id, ['is_primary' => true]);
-
-                                // Update unit status to claimed
-                                $unit->update(['status' => 'claimed']);
-
-                                $results['created']++;
                             } else {
-                                // User exists, just link to unit if not already linked
-                                if (!$existingUser->units()->where('unit_id', $unit->id)->exists()) {
-                                    $existingUser->units()->attach($unit->id, ['is_primary' => true]);
+                                // Update DEWA premise number, floor, and building if unit exists
+                                $unit->update([
+                                    'dewa_premise_number' => $dewaPremiseNumber,
+                                    'floor' => $floor,
+                                    'building' => $property->project_name
+                                ]);
+                            }
+
+                            // Process Buyer 1
+                            if (!empty($buyer1Name) && !empty($buyer1Email)) {
+                                // Validate email format
+                                if (!filter_var($buyer1Email, FILTER_VALIDATE_EMAIL)) {
+                                    $results['errors'][] = "Row {$results['total']}: Invalid buyer 1 email format";
+                                    $results['skipped']++;
+                                    continue;
+                                }
+
+                                // Check if user already exists
+                                $existingUser = User::where('email', $buyer1Email)->first();
+                                if (!$existingUser) {
+                                    // Generate random password
+                                    $password = Str::random(12);
+
+                                    // Create user
+                                    $user = User::create([
+                                        'full_name' => $buyer1Name,
+                                        'email' => $buyer1Email,
+                                        'password' => Hash::make($password),
+                                    ]);
+
+                                    // Assign user to unit as primary
+                                    $user->units()->attach($unit->id, ['is_primary' => true]);
+
+                                    // Update unit status to claimed
                                     $unit->update(['status' => 'claimed']);
+
+                                    $results['created']++;
+                                } else {
+                                    // User exists, just link to unit if not already linked
+                                    if (!$existingUser->units()->where('unit_id', $unit->id)->exists()) {
+                                        $existingUser->units()->attach($unit->id, ['is_primary' => true]);
+                                        $unit->update(['status' => 'claimed']);
+                                    }
                                 }
                             }
-                        }
 
-                        // Process Buyer 2 (co-owner)
-                        if (!empty($buyer2Name) && !empty($buyer2Email)) {
-                            // Validate email format
-                            if (!filter_var($buyer2Email, FILTER_VALIDATE_EMAIL)) {
-                                $results['errors'][] = "Row {$results['total']}: Invalid buyer 2 email format";
-                                continue; // Don't skip the whole row, just buyer 2
-                            }
+                            // Process Buyer 2 (co-owner)
+                            if (!empty($buyer2Name) && !empty($buyer2Email)) {
+                                // Validate email format
+                                if (!filter_var($buyer2Email, FILTER_VALIDATE_EMAIL)) {
+                                    $results['errors'][] = "Row {$results['total']}: Invalid buyer 2 email format";
+                                    continue; // Don't skip the whole row, just buyer 2
+                                }
 
-                            // Check if user already exists
-                            $existingUser2 = User::where('email', $buyer2Email)->first();
-                            if (!$existingUser2) {
-                                // Generate random password
-                                $password = Str::random(12);
+                                // Check if user already exists
+                                $existingUser2 = User::where('email', $buyer2Email)->first();
+                                if (!$existingUser2) {
+                                    // Generate random password
+                                    $password = Str::random(12);
 
-                                // Create user
-                                $user2 = User::create([
-                                    'full_name' => $buyer2Name,
-                                    'email' => $buyer2Email,
-                                    'password' => Hash::make($password),
-                                ]);
+                                    // Create user
+                                    $user2 = User::create([
+                                        'full_name' => $buyer2Name,
+                                        'email' => $buyer2Email,
+                                        'password' => Hash::make($password),
+                                    ]);
 
-                                // Assign user to unit as co-owner (not primary)
-                                $user2->units()->attach($unit->id, ['is_primary' => false]);
+                                    // Assign user to unit as co-owner (not primary)
+                                    $user2->units()->attach($unit->id, ['is_primary' => false]);
 
-                                $results['created']++;
-                            } else {
-                                // User exists, just link to unit if not already linked
-                                if (!$existingUser2->units()->where('unit_id', $unit->id)->exists()) {
-                                    $existingUser2->units()->attach($unit->id, ['is_primary' => false]);
+                                    $results['created']++;
+                                } else {
+                                    // User exists, just link to unit if not already linked
+                                    if (!$existingUser2->units()->where('unit_id', $unit->id)->exists()) {
+                                        $existingUser2->units()->attach($unit->id, ['is_primary' => false]);
+                                    }
                                 }
                             }
+                            
+                            $batchCount++;
+                            
+                            // Commit every batch and start a new transaction
+                            if ($batchCount >= $batchSize) {
+                                DB::commit();
+                                DB::beginTransaction();
+                                $batchCount = 0;
+                                
+                                // Log progress
+                                Log::info("Processed {$results['total']} rows, created {$results['created']} users");
+                            }
+                        } catch (\Exception $rowError) {
+                            Log::error("Error processing row {$results['total']}", [
+                                'error' => $rowError->getMessage(),
+                                'row' => $row
+                            ]);
+                            $results['errors'][] = "Row {$results['total']}: {$rowError->getMessage()}";
+                            $results['skipped']++;
                         }
                     }
                     
+                    // Commit any remaining rows
+                    DB::commit();
                     fclose($handle);
                 } elseif ($extension === 'xlsx' || $extension === 'xls') {
-                    // Parse Excel file
+                    // Parse Excel file - process in memory-efficient way
+                    Log::info('Processing Excel file');
+                    
                     $data = Excel::toArray([], $file);
                     
                     if (empty($data) || empty($data[0])) {
@@ -1028,135 +1066,164 @@ class UserController extends Controller
                     array_shift($rows);
                     array_shift($rows);
                     
+                    $batchCount = 0;
+                    $batchSize = 50;
+                    
+                    DB::beginTransaction();
+                    
                     foreach ($rows as $row) {
-                        $results['total']++;
-                        
-                        // Skip empty rows
-                        if (empty(array_filter($row))) {
-                            continue;
-                        }
-                        
-                        // Expected format: S.NO, Unit No, DEWA Premise No, Status, Buyer 1 Name, Passport, Contact, Email, Buyer 2 Name, Passport, Contact, Email
-                        if (count($row) < 12) {
-                            $results['errors'][] = "Row {$results['total']}: Invalid format - expected 12 columns";
-                            $results['skipped']++;
-                            continue;
-                        }
-
-                        $unitNumber = trim($row[1]);
-                        $dewaPremiseNumber = trim($row[2]);
-                        $status = trim($row[3]);
-                        $buyer1Name = trim($row[4]);
-                        $buyer1Email = trim($row[7]);
-                        $buyer2Name = isset($row[8]) ? trim($row[8]) : '';
-                        $buyer2Email = isset($row[11]) ? trim($row[11]) : '';
-                        
-                        // Skip if no buyers (Available/Blocked status)
-                        if (empty($buyer1Name) && empty($buyer1Email)) {
-                            continue;
-                        }
-
-                        // Extract floor from unit number (first digit(s))
-                        $floor = '';
-                        if (strlen($unitNumber) >= 2) {
-                            $floor = substr($unitNumber, 0, -2); // All digits except last 2
-                        }
-
-                        // Find or create unit
-                        $unit = \App\Models\Unit::where('property_id', $request->property_id)
-                            ->where('unit', $unitNumber)
-                            ->first();
-
-                        if (!$unit) {
-                            // Create unit if it doesn't exist
-                            $unit = \App\Models\Unit::create([
-                                'property_id' => $request->property_id,
-                                'unit' => $unitNumber,
-                                'floor' => $floor,
-                                'building' => $property->project_name,
-                                'dewa_premise_number' => $dewaPremiseNumber,
-                                'status' => 'unclaimed'
-                            ]);
-                        } else {
-                            // Update DEWA premise number, floor, and building if unit exists
-                            $unit->update([
-                                'dewa_premise_number' => $dewaPremiseNumber,
-                                'floor' => $floor,
-                                'building' => $property->project_name
-                            ]);
-                        }
-
-                        // Process Buyer 1
-                        if (!empty($buyer1Name) && !empty($buyer1Email)) {
-                            // Validate email format
-                            if (!filter_var($buyer1Email, FILTER_VALIDATE_EMAIL)) {
-                                $results['errors'][] = "Row {$results['total']}: Invalid buyer 1 email format";
+                        try {
+                            $results['total']++;
+                            
+                            // Skip empty rows
+                            if (empty(array_filter($row))) {
+                                continue;
+                            }
+                            
+                            // Expected format: S.NO, Unit No, DEWA Premise No, Status, Buyer 1 Name, Passport, Contact, Email, Buyer 2 Name, Passport, Contact, Email
+                            if (count($row) < 12) {
+                                $results['errors'][] = "Row {$results['total']}: Invalid format - expected 12 columns";
                                 $results['skipped']++;
                                 continue;
                             }
 
-                            // Check if user already exists
-                            $existingUser = User::where('email', $buyer1Email)->first();
-                            if (!$existingUser) {
-                                // Generate random password
-                                $password = Str::random(12);
+                            $unitNumber = trim($row[1]);
+                            $dewaPremiseNumber = trim($row[2]);
+                            $status = trim($row[3]);
+                            $buyer1Name = trim($row[4]);
+                            $buyer1Email = trim($row[7]);
+                            $buyer2Name = isset($row[8]) ? trim($row[8]) : '';
+                            $buyer2Email = isset($row[11]) ? trim($row[11]) : '';
+                            
+                            // Skip if no buyers (Available/Blocked status)
+                            if (empty($buyer1Name) && empty($buyer1Email)) {
+                                continue;
+                            }
 
-                                // Create user
-                                $user = User::create([
-                                    'full_name' => $buyer1Name,
-                                    'email' => $buyer1Email,
-                                    'password' => Hash::make($password),
+                            // Extract floor from unit number (first digit(s))
+                            $floor = '';
+                            if (strlen($unitNumber) >= 2) {
+                                $floor = substr($unitNumber, 0, -2); // All digits except last 2
+                            }
+
+                            // Find or create unit
+                            $unit = \App\Models\Unit::where('property_id', $request->property_id)
+                                ->where('unit', $unitNumber)
+                                ->first();
+
+                            if (!$unit) {
+                                // Create unit if it doesn't exist
+                                $unit = \App\Models\Unit::create([
+                                    'property_id' => $request->property_id,
+                                    'unit' => $unitNumber,
+                                    'floor' => $floor,
+                                    'building' => $property->project_name,
+                                    'dewa_premise_number' => $dewaPremiseNumber,
+                                    'status' => 'unclaimed'
                                 ]);
-
-                                // Assign user to unit as primary
-                                $user->units()->attach($unit->id, ['is_primary' => true]);
-
-                                // Update unit status to claimed
-                                $unit->update(['status' => 'claimed']);
-
-                                $results['created']++;
                             } else {
-                                // User exists, just link to unit if not already linked
-                                if (!$existingUser->units()->where('unit_id', $unit->id)->exists()) {
-                                    $existingUser->units()->attach($unit->id, ['is_primary' => true]);
+                                // Update DEWA premise number, floor, and building if unit exists
+                                $unit->update([
+                                    'dewa_premise_number' => $dewaPremiseNumber,
+                                    'floor' => $floor,
+                                    'building' => $property->project_name
+                                ]);
+                            }
+
+                            // Process Buyer 1
+                            if (!empty($buyer1Name) && !empty($buyer1Email)) {
+                                // Validate email format
+                                if (!filter_var($buyer1Email, FILTER_VALIDATE_EMAIL)) {
+                                    $results['errors'][] = "Row {$results['total']}: Invalid buyer 1 email format";
+                                    $results['skipped']++;
+                                    continue;
+                                }
+
+                                // Check if user already exists
+                                $existingUser = User::where('email', $buyer1Email)->first();
+                                if (!$existingUser) {
+                                    // Generate random password
+                                    $password = Str::random(12);
+
+                                    // Create user
+                                    $user = User::create([
+                                        'full_name' => $buyer1Name,
+                                        'email' => $buyer1Email,
+                                        'password' => Hash::make($password),
+                                    ]);
+
+                                    // Assign user to unit as primary
+                                    $user->units()->attach($unit->id, ['is_primary' => true]);
+
+                                    // Update unit status to claimed
                                     $unit->update(['status' => 'claimed']);
+
+                                    $results['created']++;
+                                } else {
+                                    // User exists, just link to unit if not already linked
+                                    if (!$existingUser->units()->where('unit_id', $unit->id)->exists()) {
+                                        $existingUser->units()->attach($unit->id, ['is_primary' => true]);
+                                        $unit->update(['status' => 'claimed']);
+                                    }
                                 }
                             }
-                        }
 
-                        // Process Buyer 2 (co-owner)
-                        if (!empty($buyer2Name) && !empty($buyer2Email)) {
-                            // Validate email format
-                            if (!filter_var($buyer2Email, FILTER_VALIDATE_EMAIL)) {
-                                $results['errors'][] = "Row {$results['total']}: Invalid buyer 2 email format";
-                                continue; // Don't skip the whole row, just buyer 2
-                            }
+                            // Process Buyer 2 (co-owner)
+                            if (!empty($buyer2Name) && !empty($buyer2Email)) {
+                                // Validate email format
+                                if (!filter_var($buyer2Email, FILTER_VALIDATE_EMAIL)) {
+                                    $results['errors'][] = "Row {$results['total']}: Invalid buyer 2 email format";
+                                    continue; // Don't skip the whole row, just buyer 2
+                                }
 
-                            // Check if user already exists
-                            $existingUser2 = User::where('email', $buyer2Email)->first();
-                            if (!$existingUser2) {
-                                // Generate random password
-                                $password = Str::random(12);
+                                // Check if user already exists
+                                $existingUser2 = User::where('email', $buyer2Email)->first();
+                                if (!$existingUser2) {
+                                    // Generate random password
+                                    $password = Str::random(12);
 
-                                // Create user
-                                $user2 = User::create([
-                                    'full_name' => $buyer2Name,
-                                    'email' => $buyer2Email,
-                                    'password' => Hash::make($password),
-                                ]);
+                                    // Create user
+                                    $user2 = User::create([
+                                        'full_name' => $buyer2Name,
+                                        'email' => $buyer2Email,
+                                        'password' => Hash::make($password),
+                                    ]);
 
-                                // Assign user to unit as co-owner (not primary)
-                                $user2->units()->attach($unit->id, ['is_primary' => false]);
+                                    // Assign user to unit as co-owner (not primary)
+                                    $user2->units()->attach($unit->id, ['is_primary' => false]);
 
-                                $results['created']++;
-                            } else {
-                                // User exists, just link to unit if not already linked
-                                if (!$existingUser2->units()->where('unit_id', $unit->id)->exists()) {
-                                    $existingUser2->units()->attach($unit->id, ['is_primary' => false]);
+                                    $results['created']++;
+                                } else {
+                                    // User exists, just link to unit if not already linked
+                                    if (!$existingUser2->units()->where('unit_id', $unit->id)->exists()) {
+                                        $existingUser2->units()->attach($unit->id, ['is_primary' => false]);
+                                    }
                                 }
                             }
+                            
+                            $batchCount++;
+                            
+                            // Commit every batch and start a new transaction
+                            if ($batchCount >= $batchSize) {
+                                DB::commit();
+                                DB::beginTransaction();
+                                $batchCount = 0;
+                                
+                                // Log progress
+                                Log::info("Processed {$results['total']} rows, created {$results['created']} users");
+                            }
+                        } catch (\Exception $rowError) {
+                            Log::error("Error processing row {$results['total']}", [
+                                'error' => $rowError->getMessage(),
+                                'row' => $row
+                            ]);
+                            $results['errors'][] = "Row {$results['total']}: {$rowError->getMessage()}";
+                            $results['skipped']++;
                         }
                     }
+                    
+                    // Commit any remaining rows
+                    DB::commit();
                 } else {
                     return response()->json([
                         'success' => false,
@@ -1164,7 +1231,7 @@ class UserController extends Controller
                     ], 400);
                 }
 
-                DB::commit();
+                Log::info('Bulk upload completed', $results);
 
                 return response()->json([
                     'success' => true,
@@ -1172,10 +1239,22 @@ class UserController extends Controller
                     'results' => $results
                 ], 200);
             } catch (\Exception $e) {
-                DB::rollBack();
+                if (DB::transactionLevel() > 0) {
+                    DB::rollBack();
+                }
+                Log::error('Bulk upload error', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
                 throw $e;
             }
         } catch (\Exception $e) {
+            Log::error('Bulk upload failed', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to bulk upload clients',
