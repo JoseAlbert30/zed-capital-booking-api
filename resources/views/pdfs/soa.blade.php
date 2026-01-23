@@ -283,22 +283,20 @@
         <div class="info-row">
             <div class="info-label">Email{{ count($owners) > 1 ? 's' : '' }}:</div>
             <div class="info-value">
-                @foreach($owners as $index => $owner)
-                    @if($owner->email)
-                        {{ $owner->email }}@if($index < count($owners) - 1), @endif
-                    @endif
-                @endforeach
+                @php
+                    $emails = $owners->filter(fn($o) => !empty($o->email))->pluck('email')->toArray();
+                    echo implode(', ', $emails);
+                @endphp
             </div>
         </div>
         
         <div class="info-row">
             <div class="info-label">Mobile{{ count($owners) > 1 ? 's' : '' }}:</div>
             <div class="info-value">
-                @foreach($owners as $index => $owner)
-                    @if($owner->mobile_number)
-                        {{ $owner->mobile_number }}@if($index < count($owners) - 1), @endif
-                    @endif
-                @endforeach
+                @php
+                    $mobiles = $owners->filter(fn($o) => !empty($o->mobile_number))->pluck('mobile_number')->toArray();
+                    echo implode(', ', $mobiles);
+                @endphp
             </div>
         </div>
         
