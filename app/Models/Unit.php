@@ -28,6 +28,12 @@ class Unit extends Model
         'handover_status',
         'handover_email_sent',
         'handover_email_sent_at',
+        'total_unit_price',
+        'dld_fees',
+        'admin_fee',
+        'amount_to_pay',
+        'total_amount_paid',
+        'outstanding_amount',
     ];
 
     protected $casts = [

@@ -75,28 +75,37 @@ class GenerateSOAJob implements ShouldQueue
             // Prepare owner names
             $ownerNames = $owners->pluck('full_name')->toArray();
 
-            // Generate PDF
-            $pdf = PDF::loadView('soa-template', [
-                'unitNumber' => $unit->unit,
-                'owners' => $ownerNames,
-                'property' => $unit->property->project_name,
-                'generatedDate' => now()->format('d M Y')
+            // Get logos using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
+            
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
+
+            // Generate PDF with new template
+            $pdf = PDF::loadView('pdfs.soa', [
+                'unit' => $unit,
+                'owners' => $owners,
+                'property' => $unit->property,
+                'logos' => [
+                    'left' => $vieraLogo,
+                    'right' => $vantageLogo
+                ]
             ]);
 
             // Define storage path
             $propertyFolder = $unit->property->project_name;
             $unitFolder = $unit->unit;
             $filename = $unit->unit . '-soa.pdf';
-            $storagePath = "attachments/{$propertyFolder}/{$unitFolder}";
-            $fullPath = storage_path("app/public/{$storagePath}/{$filename}");
+            $storagePath = "attachments/{$propertyFolder}/{$unitFolder}/{$filename}";
 
-            // Create directory if it doesn't exist
-            if (!file_exists(storage_path("app/public/{$storagePath}"))) {
-                mkdir(storage_path("app/public/{$storagePath}"), 0755, true);
-            }
-
-            // Save PDF
-            $pdf->save($fullPath);
+            // Save PDF using Storage facade
+            \Storage::disk('public')->put($storagePath, $pdf->output());
 
             // Create attachment record
             UserAttachment::create([

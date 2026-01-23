@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Unit;
 use App\Models\Property;
+use App\Models\UserAttachment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -748,6 +749,279 @@ class UnitController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to bulk upload SOA',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload payment details from CSV file
+     */
+    public function uploadPaymentDetails(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'file' => 'required|file|mimes:csv,txt,xlsx|max:10240',
+                'property_id' => 'required|exists:properties,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $file = $request->file('file');
+            $extension = $file->getClientOriginalExtension();
+            $updatedCount = 0;
+            $errors = [];
+            $skipped = [];
+
+            DB::beginTransaction();
+
+            try {
+                if ($extension === 'csv' || $extension === 'txt') {
+                    $handle = fopen($file->getRealPath(), 'r');
+                    
+                    // Skip header row
+                    $header = fgetcsv($handle);
+                    
+                    while (($row = fgetcsv($handle)) !== false) {
+                        try {
+                            if (count($row) < 8) {
+                                $skipped[] = "Row skipped: Invalid format";
+                                continue;
+                            }
+
+                            $unitNumber = trim($row[0]);
+                            $buyer1 = trim($row[1]);
+                            $totalUnitPrice = $this->parseCurrencyValue($row[2]);
+                            $dldFees = $this->parseCurrencyValue($row[3]);
+                            $adminFee = $this->parseCurrencyValue($row[4]);
+                            $amountToPay = $this->parseCurrencyValue($row[5]);
+                            $totalAmountPaid = $this->parseCurrencyValue($row[6]);
+                            $outstandingAmount = $this->parseCurrencyValue($row[7]);
+
+                            if (empty($unitNumber)) {
+                                $skipped[] = "Row skipped: Empty unit number";
+                                continue;
+                            }
+
+                            // Find unit by unit number and property
+                            $unit = Unit::where('property_id', $request->property_id)
+                                ->where('unit', $unitNumber)
+                                ->first();
+
+                            if (!$unit) {
+                                $skipped[] = "Unit {$unitNumber}: Not found";
+                                continue;
+                            }
+
+                            // Update payment details
+                            $unit->update([
+                                'total_unit_price' => $totalUnitPrice,
+                                'dld_fees' => $dldFees,
+                                'admin_fee' => $adminFee,
+                                'amount_to_pay' => $amountToPay,
+                                'total_amount_paid' => $totalAmountPaid,
+                                'outstanding_amount' => $outstandingAmount
+                            ]);
+
+                            $updatedCount++;
+                        } catch (\Exception $e) {
+                            $errors[] = "Unit {$unitNumber}: " . $e->getMessage();
+                        }
+                    }
+                    
+                    fclose($handle);
+                } elseif ($extension === 'xlsx') {
+                    $data = Excel::toArray([], $file);
+                    
+                    if (empty($data) || empty($data[0])) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Excel file is empty'
+                        ], 400);
+                    }
+                    
+                    $rows = $data[0];
+                    // Skip header row
+                    array_shift($rows);
+                    
+                    foreach ($rows as $row) {
+                        try {
+                            if (count($row) < 8) {
+                                $skipped[] = "Row skipped: Invalid format";
+                                continue;
+                            }
+
+                            $unitNumber = trim($row[0]);
+                            $buyer1 = trim($row[1]);
+                            $totalUnitPrice = $this->parseCurrencyValue($row[2]);
+                            $dldFees = $this->parseCurrencyValue($row[3]);
+                            $adminFee = $this->parseCurrencyValue($row[4]);
+                            $amountToPay = $this->parseCurrencyValue($row[5]);
+                            $totalAmountPaid = $this->parseCurrencyValue($row[6]);
+                            $outstandingAmount = $this->parseCurrencyValue($row[7]);
+
+                            if (empty($unitNumber)) {
+                                $skipped[] = "Row skipped: Empty unit number";
+                                continue;
+                            }
+
+                            // Find unit
+                            $unit = Unit::where('property_id', $request->property_id)
+                                ->where('unit', $unitNumber)
+                                ->first();
+
+                            if (!$unit) {
+                                $skipped[] = "Unit {$unitNumber}: Not found";
+                                continue;
+                            }
+
+                            // Update payment details
+                            $unit->update([
+                                'total_unit_price' => $totalUnitPrice,
+                                'dld_fees' => $dldFees,
+                                'admin_fee' => $adminFee,
+                                'amount_to_pay' => $amountToPay,
+                                'total_amount_paid' => $totalAmountPaid,
+                                'outstanding_amount' => $outstandingAmount
+                            ]);
+
+                            $updatedCount++;
+                        } catch (\Exception $e) {
+                            $errors[] = "Unit {$unitNumber}: " . $e->getMessage();
+                        }
+                    }
+                }
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => "Successfully updated payment details for {$updatedCount} unit(s)",
+                    'updated_count' => $updatedCount,
+                    'skipped' => $skipped,
+                    'errors' => $errors
+                ], 200);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload payment details',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update payment details for a single unit and generate SOA
+     */
+    public function updateSingleUnitPaymentDetails(Request $request, $id)
+    {
+        $request->validate([
+            'total_unit_price' => 'nullable|numeric',
+            'dld_fees' => 'nullable|numeric',
+            'admin_fee' => 'nullable|numeric',
+            'amount_to_pay' => 'nullable|numeric',
+            'total_amount_paid' => 'nullable|numeric',
+            'outstanding_amount' => 'nullable|numeric',
+        ]);
+
+        try {
+            $unit = Unit::with(['property', 'users'])->findOrFail($id);
+
+            // Update payment details
+            $unit->update([
+                'total_unit_price' => $request->total_unit_price,
+                'dld_fees' => $request->dld_fees,
+                'admin_fee' => $request->admin_fee,
+                'amount_to_pay' => $request->amount_to_pay,
+                'total_amount_paid' => $request->total_amount_paid,
+                'outstanding_amount' => $request->outstanding_amount,
+            ]);
+
+            // Generate SOA
+            try {
+                // Delete all existing SOA attachments for this unit
+                $existingSOAs = $unit->attachments()->where('type', 'soa')->get();
+                foreach ($existingSOAs as $existingSOA) {
+                    // Delete file from storage (same structure as bulk generation)
+                    $propertyFolder = $unit->property->project_name;
+                    $unitFolder = $unit->unit;
+                    $filePath = "attachments/{$propertyFolder}/{$unitFolder}/{$existingSOA->filename}";
+                    if (Storage::disk('public')->exists($filePath)) {
+                        Storage::disk('public')->delete($filePath);
+                    }
+                    // Delete database record
+                    $existingSOA->delete();
+                }
+
+                // Load logos using Storage facade (same as bulk generation job)
+                $vieraLogo = '';
+                $vantageLogo = '';
+                
+                if (Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                    $vieraLogo = 'data:image/png;base64,' . base64_encode(Storage::disk('public')->get('letterheads/viera-black.png'));
+                }
+                
+                if (Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                    $vantageLogo = 'data:image/png;base64,' . base64_encode(Storage::disk('public')->get('letterheads/vantage-black.png'));
+                }
+
+                // Generate PDF (same as bulk generation job)
+                $owners = $unit->users;
+                $property = $unit->property;
+
+                $pdf = \PDF::loadView('pdfs.soa', [
+                    'unit' => $unit,
+                    'owners' => $owners,
+                    'property' => $property,
+                    'logos' => [
+                        'left' => $vieraLogo,
+                        'right' => $vantageLogo
+                    ]
+                ]);
+
+                // Save PDF with new naming convention (same structure as bulk generation)
+                $filename = "{$unit->unit}-soa.pdf";
+                $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
+                $filepath = $folderPath . '/' . $filename;
+                Storage::disk('public')->put($filepath, $pdf->output());
+
+                // Create attachment record
+                $attachment = new UserAttachment();
+                $attachment->unit_id = $unit->id;
+                $attachment->filename = $filename;
+                $attachment->type = 'soa';
+                $attachment->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Payment details updated and SOA generated successfully',
+                    'unit' => $unit->fresh(['property', 'users', 'attachments']),
+                    'attachment' => $attachment,
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Payment details updated but SOA generation failed',
+                    'error' => $e->getMessage(),
+                    'unit' => $unit->fresh(['property', 'users', 'attachments']),
+                ], 200);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update payment details',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -1855,7 +2129,7 @@ class UnitController extends Controller
                 'owner' => $primaryOwner,
                 'documents' => $uploadedBuyerDocs
             ], function ($message) use ($unit, $uploadedBuyerDocs, $nocPath, $nocFilename) {
-                $message->to('vantage@zedcapital.ae')
+                $message->to('albertarnedo03@gmail.com')
                     ->subject('Handover Requirements - Unit ' . $unit->unit . ' - ' . $unit->property->project_name);
                 
                 // Attach all buyer documents
@@ -1886,12 +2160,20 @@ class UnitController extends Controller
                             }
                         }
                         
+                        // Attach the file if found
+                        if ($filePath && file_exists($filePath)) {
+                            $message->attach($filePath, [
+                                'as' => $doc->filename,
+                                'mime' => 'application/pdf',
+                            ]);
+                        }
+                        
                     } catch (\Exception $e) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Failed to locate attachment file: ' . $doc->filename,
-                            'error' => $e->getMessage()
-                        ], 500);
+                        // Log error but continue with other attachments
+                        \Log::warning('Failed to attach buyer document: ' . $doc->filename, [
+                            'error' => $e->getMessage(),
+                            'unit_id' => $unit->id
+                        ]);
                     }
                 }
                 
@@ -1937,6 +2219,22 @@ class UnitController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Parse currency value from CSV (removes commas, quotes, spaces)
+     */
+    private function parseCurrencyValue($value)
+    {
+        if (empty($value) || trim($value) === '-' || trim($value) === '') {
+            return null;
+        }
+        
+        // Remove quotes, commas, and spaces
+        $cleanValue = str_replace(['"', ',', ' ', "'"], '', trim($value));
+        
+        // Convert to float
+        return is_numeric($cleanValue) ? (float) $cleanValue : null;
     }
 }
 

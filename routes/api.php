@@ -85,16 +85,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [UnitController::class, 'store']);
         Route::post('/bulk', [UnitController::class, 'bulkUpload']);
         Route::post('/bulk-upload-soa', [UnitController::class, 'bulkUploadSOA']);
+        Route::post('/upload-payment-details', [UnitController::class, 'uploadPaymentDetails']);
         Route::post('/bulk-send-handover', [UnitController::class, 'bulkSendHandoverEmail']);
         Route::get('/check-soa-status', [UnitController::class, 'checkSOAStatus']);
         Route::post('/bulk-generate-soa', [UnitController::class, 'bulkGenerateSOA']);
         Route::get('/handover-batch/{batchId}/progress', [UnitController::class, 'getHandoverEmailProgress']);
         Route::get('/soa-batch/{batchId}/progress', [UnitController::class, 'getSOAGenerationProgress']);
-        Route::get('/{unit}', [UnitController::class, 'show']);
-        Route::put('/{unit}', [UnitController::class, 'update']);
-        Route::delete('/{unit}', [UnitController::class, 'destroy']);
         
-        // Unit-centric workflow endpoints
+        // Unit-centric workflow endpoints (specific routes before generic {unit})
+        Route::post('/{unit}/payment-details', [UnitController::class, 'updateSingleUnitPaymentDetails']);
         Route::put('/{unit}/payment-status', [UnitController::class, 'updatePaymentStatus']);
         Route::post('/{unit}/remarks', [UnitController::class, 'addRemark']);
         Route::post('/{unit}/send-soa', [UnitController::class, 'sendSOAEmail']);
@@ -110,6 +109,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{unit}/noc-handover', [UnitController::class, 'generateNOC']);
         Route::get('/{unit}/developer-requirements-preview', [UnitController::class, 'previewDeveloperRequirements']);
         Route::post('/{unit}/send-to-developer', [UnitController::class, 'sendRequirementsToDeveloper']);
+        
+        Route::get('/{unit}', [UnitController::class, 'show']);
+        Route::put('/{unit}', [UnitController::class, 'update']);
+        Route::delete('/{unit}', [UnitController::class, 'destroy']);
     });
 
     Route::prefix('email')->group(function () {
