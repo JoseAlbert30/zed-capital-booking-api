@@ -787,11 +787,25 @@ class BookingController extends Controller
             
             // Save image if provided
             if ($request->hasFile('image')) {
-                $folderPath = 'snagging/' . $unit->property->project_name . '/' . $unit->unit;
+                // Sanitize folder path to remove special characters
+                $projectName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $unit->property->project_name);
+                $unitName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $unit->unit);
+                $folderPath = 'snagging/' . $projectName . '/' . $unitName;
+                
                 $file = $request->file('image');
-                $extension = $file->extension();
+                $extension = $file->getClientOriginalExtension();
                 $filename = 'defect_' . time() . '_' . uniqid() . '.' . $extension;
+                
+                // Ensure the directory exists
+                if (!Storage::disk('public')->exists($folderPath)) {
+                    Storage::disk('public')->makeDirectory($folderPath, 0755, true);
+                }
+                
                 $path = $file->storeAs($folderPath, $filename, 'public');
+                
+                if (!$path) {
+                    throw new \Exception('Failed to store image file');
+                }
             }
             
             // Create defect record
@@ -819,7 +833,10 @@ class BookingController extends Controller
                 'defect' => $defect->load('creator'),
             ], 201);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to create defect'], 500);
+            return response()->json([
+                'message' => 'Failed to create defect',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 

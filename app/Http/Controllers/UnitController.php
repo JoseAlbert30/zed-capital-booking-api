@@ -2170,10 +2170,11 @@ class UnitController extends Controller
                         
                     } catch (\Exception $e) {
                         // Log error but continue with other attachments
-                        \Log::warning('Failed to attach buyer document: ' . $doc->filename, [
-                            'error' => $e->getMessage(),
-                            'unit_id' => $unit->id
-                        ]);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Failed to attach document: ' . $doc->filename,
+                            'error' => $e->getMessage()
+                        ], 500);
                     }
                 }
                 

@@ -43,10 +43,6 @@ class SendHandoverEmailJob implements ShouldQueue
             // Check if SOA exists
             $soaAttachments = $unit->attachments->where('type', 'soa');
             if ($soaAttachments->isEmpty()) {
-                Log::warning('Skipping handover email - No SOA found', [
-                    'unit_id' => $this->unitId,
-                    'unit' => $unit->unit
-                ]);
                 return;
             }
 
@@ -54,10 +50,6 @@ class SendHandoverEmailJob implements ShouldQueue
             $recipients = $unit->users->pluck('email')->toArray();
             
             if (empty($recipients)) {
-                Log::warning('Skipping handover email - No owners found', [
-                    'unit_id' => $this->unitId,
-                    'unit' => $unit->unit
-                ]);
                 return;
             }
 
@@ -171,12 +163,6 @@ class SendHandoverEmailJob implements ShouldQueue
                 }
             }
 
-            Log::info('Handover email sent successfully', [
-                'unit_id' => $this->unitId,
-                'unit' => $unit->unit,
-                'recipients_count' => count($recipients),
-                'batch_id' => $this->batchId
-            ]);
 
         } catch (\Exception $e) {
             // Update batch failed count if batch_id provided
@@ -187,13 +173,6 @@ class SendHandoverEmailJob implements ShouldQueue
                 }
             }
 
-            Log::error('Failed to send handover email in job', [
-                'unit_id' => $this->unitId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'batch_id' => $this->batchId
-            ]);
-            
             // Re-throw to allow job retry
             throw $e;
         }
@@ -211,11 +190,5 @@ class SendHandoverEmailJob implements ShouldQueue
                 $batch->incrementFailed();
             }
         }
-
-        Log::error('Handover email job failed after retries', [
-            'unit_id' => $this->unitId,
-            'error' => $exception->getMessage(),
-            'batch_id' => $this->batchId
-        ]);
     }
 }

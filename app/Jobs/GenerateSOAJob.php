@@ -58,10 +58,6 @@ class GenerateSOAJob implements ShouldQueue
             // Get all owners
             $owners = $unit->users;
             if ($owners->isEmpty()) {
-                Log::warning('Skipping SOA generation - No owners found', [
-                    'unit_id' => $this->unitId,
-                    'unit' => $unit->unit
-                ]);
                 
                 if ($this->batchId) {
                     $batch = \App\Models\SoaGenerationBatch::where('batch_id', $this->batchId)->first();
@@ -131,13 +127,6 @@ class GenerateSOAJob implements ShouldQueue
                 }
             }
 
-            Log::info('SOA generated successfully', [
-                'unit_id' => $this->unitId,
-                'unit' => $unit->unit,
-                'filename' => $filename,
-                'batch_id' => $this->batchId
-            ]);
-
         } catch (\Exception $e) {
             // Update batch failed count
             if ($this->batchId) {
@@ -147,12 +136,6 @@ class GenerateSOAJob implements ShouldQueue
                 }
             }
 
-            Log::error('Failed to generate SOA', [
-                'unit_id' => $this->unitId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'batch_id' => $this->batchId
-            ]);
             
             throw $e;
         }
@@ -170,10 +153,5 @@ class GenerateSOAJob implements ShouldQueue
             }
         }
 
-        Log::error('SOA generation job failed after retries', [
-            'unit_id' => $this->unitId,
-            'error' => $exception->getMessage(),
-            'batch_id' => $this->batchId
-        ]);
     }
 }
