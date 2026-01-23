@@ -1620,7 +1620,7 @@ class UnitController extends Controller
                     'expires_at' => now()->addHours(72),
                 ]);
 
-                $bookingUrl = env('FRONTEND_URL', 'http://localhost:3000') . '/booking?token=' . $magicLink->token . '&unit_id=' . $unit->id;
+                $bookingUrl = config('app.frontend_url') . '/booking?token=' . $magicLink->token . '&unit_id=' . $unit->id;
                 $firstName = explode(' ', $user->full_name)[0];
 
                 \Mail::send('emails.booking-link', [
