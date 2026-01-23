@@ -18,8 +18,13 @@ jobs:
           script: |
             set -e
             cd /var/www/zed-capital-booking-api
+            
+            # Fix permissions before git operations
+            sudo chown -R $USER:$USER .
+            
             git fetch --all
             git reset --hard origin/main
+            git clean -fd
             composer install --no-dev --optimize-autoloader
             
             # Ensure storage is linked
@@ -32,6 +37,10 @@ jobs:
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
+            
+            # Set proper permissions for web server
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
             
             # Restart queue workers to pick up new code
             php artisan queue:restart
