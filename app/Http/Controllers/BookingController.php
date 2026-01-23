@@ -796,16 +796,15 @@ class BookingController extends Controller
                 $extension = $file->getClientOriginalExtension();
                 $filename = 'defect_' . time() . '_' . uniqid() . '.' . $extension;
                 
-                // Ensure the directory exists
-                if (!Storage::disk('public')->exists($folderPath)) {
-                    Storage::disk('public')->makeDirectory($folderPath, 0755, true);
-                }
+                // Use Storage::put which automatically creates directories
+                $fullPath = $folderPath . '/' . $filename;
+                $stored = Storage::disk('public')->put($fullPath, file_get_contents($file->getRealPath()));
                 
-                $path = $file->storeAs($folderPath, $filename, 'public');
-                
-                if (!$path) {
+                if (!$stored) {
                     throw new \Exception('Failed to store image file');
                 }
+                
+                $path = $fullPath;
             }
             
             // Create defect record
