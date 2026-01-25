@@ -364,7 +364,23 @@
             </tr>
             @endif
             
-            @if($unit->outstanding_amount !== null)
+            @if($unit->has_pho && $unit->upon_completion_amount !== null)
+            <tr>
+                <td>Upon Completion Amount To Pay</td>
+                <td class="text-right amount">{{ number_format($unit->upon_completion_amount, 2) }}</td>
+            </tr>
+            @endif
+            
+            @if($unit->has_pho && $unit->due_after_completion !== null)
+            <tr class="outstanding-row">
+                <td><strong>Due After Completion</strong></td>
+                <td class="text-right amount" style="color: {{ $unit->due_after_completion > 0 ? '#dc3545' : '#28a745' }};">
+                    {{ number_format($unit->due_after_completion, 2) }}
+                </td>
+            </tr>
+            @endif
+            
+            @if(!$unit->has_pho && $unit->outstanding_amount !== null)
             <tr class="outstanding-row">
                 <td><strong>Outstanding Balance</strong></td>
                 <td class="text-right amount" style="color: {{ $unit->outstanding_amount > 0 ? '#dc3545' : '#28a745' }};">
@@ -375,7 +391,38 @@
         </tbody>
     </table>
 
-    @if($unit->outstanding_amount !== null)
+    @if($unit->has_pho && $unit->due_after_completion !== null)
+    <div class="summary-box">
+        <div class="summary-row">
+            <div class="summary-label">Payment Status:</div>
+            <div class="summary-amount" style="color: {{ $unit->due_after_completion > 0 ? '#dc3545' : '#28a745' }};">
+                @if($unit->due_after_completion > 0)
+                    BALANCE DUE AFTER COMPLETION
+                @elseif($unit->due_after_completion < 0)
+                    OVERPAID
+                @else
+                    FULLY PAID
+                @endif
+            </div>
+        </div>
+        
+        @if($unit->due_after_completion > 0)
+        <div class="summary-row">
+            <div class="summary-label">Amount Due After Completion:</div>
+            <div class="summary-amount" style="color: #dc3545;">
+                AED {{ number_format($unit->due_after_completion, 2) }}
+            </div>
+        </div>
+        @elseif($unit->due_after_completion < 0)
+        <div class="summary-row">
+            <div class="summary-label">Overpayment:</div>
+            <div class="summary-amount" style="color: #28a745;">
+                AED {{ number_format(abs($unit->due_after_completion), 2) }}
+            </div>
+        </div>
+        @endif
+    </div>
+    @elseif(!$unit->has_pho && $unit->outstanding_amount !== null)
     <div class="summary-box">
         <div class="summary-row">
             <div class="summary-label">Payment Status:</div>

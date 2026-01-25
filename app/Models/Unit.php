@@ -34,6 +34,9 @@ class Unit extends Model
         'amount_to_pay',
         'total_amount_paid',
         'outstanding_amount',
+        'upon_completion_amount',
+        'due_after_completion',
+        'has_pho',
     ];
 
     protected $casts = [
@@ -43,6 +46,7 @@ class Unit extends Model
         'handover_ready' => 'boolean',
         'handover_email_sent' => 'boolean',
         'handover_email_sent_at' => 'datetime',
+        'has_pho' => 'boolean',
     ];
 
     /**

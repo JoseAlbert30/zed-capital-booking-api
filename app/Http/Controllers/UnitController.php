@@ -762,7 +762,8 @@ class UnitController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'file' => 'required|file|mimes:csv,txt,xlsx|max:10240',
-                'property_id' => 'required|exists:properties,id'
+                'property_id' => 'required|exists:properties,id',
+                'with_pho' => 'nullable|in:true,false,1,0'
             ]);
 
             if ($validator->fails()) {
@@ -775,7 +776,9 @@ class UnitController extends Controller
 
             $file = $request->file('file');
             $extension = $file->getClientOriginalExtension();
+            $withPho = filter_var($request->input('with_pho', false), FILTER_VALIDATE_BOOLEAN);
             $updatedCount = 0;
+            $updatedUnitIds = [];
             $errors = [];
             $skipped = [];
 
@@ -790,8 +793,9 @@ class UnitController extends Controller
                     
                     while (($row = fgetcsv($handle)) !== false) {
                         try {
-                            if (count($row) < 8) {
-                                $skipped[] = "Row skipped: Invalid format";
+                            $expectedColumns = $withPho ? 9 : 8;
+                            if (count($row) < $expectedColumns) {
+                                $skipped[] = "Row skipped: Invalid format (expected {$expectedColumns} columns)";
                                 continue;
                             }
 
@@ -802,7 +806,18 @@ class UnitController extends Controller
                             $adminFee = $this->parseCurrencyValue($row[4]);
                             $amountToPay = $this->parseCurrencyValue($row[5]);
                             $totalAmountPaid = $this->parseCurrencyValue($row[6]);
-                            $outstandingAmount = $this->parseCurrencyValue($row[7]);
+                            
+                            // PHO columns
+                            $uponCompletionAmount = null;
+                            $dueAfterCompletion = null;
+                            $outstandingAmount = null;
+                            
+                            if ($withPho) {
+                                $uponCompletionAmount = $this->parseCurrencyValue($row[7]);
+                                $dueAfterCompletion = $this->parseCurrencyValue($row[8]);
+                            } else {
+                                $outstandingAmount = $this->parseCurrencyValue($row[7]);
+                            }
 
                             if (empty($unitNumber)) {
                                 $skipped[] = "Row skipped: Empty unit number";
@@ -820,16 +835,29 @@ class UnitController extends Controller
                             }
 
                             // Update payment details
-                            $unit->update([
+                            $updateData = [
                                 'total_unit_price' => $totalUnitPrice,
                                 'dld_fees' => $dldFees,
                                 'admin_fee' => $adminFee,
                                 'amount_to_pay' => $amountToPay,
                                 'total_amount_paid' => $totalAmountPaid,
-                                'outstanding_amount' => $outstandingAmount
-                            ]);
+                                'has_pho' => $withPho,
+                            ];
+                            
+                            if ($withPho) {
+                                $updateData['upon_completion_amount'] = $uponCompletionAmount;
+                                $updateData['due_after_completion'] = $dueAfterCompletion;
+                                $updateData['outstanding_amount'] = null;
+                            } else {
+                                $updateData['outstanding_amount'] = $outstandingAmount;
+                                $updateData['upon_completion_amount'] = null;
+                                $updateData['due_after_completion'] = null;
+                            }
+                            
+                            $unit->update($updateData);
 
                             $updatedCount++;
+                            $updatedUnitIds[] = $unit->id;
                         } catch (\Exception $e) {
                             $errors[] = "Unit {$unitNumber}: " . $e->getMessage();
                         }
@@ -852,8 +880,9 @@ class UnitController extends Controller
                     
                     foreach ($rows as $row) {
                         try {
-                            if (count($row) < 8) {
-                                $skipped[] = "Row skipped: Invalid format";
+                            $expectedColumns = $withPho ? 9 : 8;
+                            if (count($row) < $expectedColumns) {
+                                $skipped[] = "Row skipped: Invalid format (expected {$expectedColumns} columns)";
                                 continue;
                             }
 
@@ -864,7 +893,18 @@ class UnitController extends Controller
                             $adminFee = $this->parseCurrencyValue($row[4]);
                             $amountToPay = $this->parseCurrencyValue($row[5]);
                             $totalAmountPaid = $this->parseCurrencyValue($row[6]);
-                            $outstandingAmount = $this->parseCurrencyValue($row[7]);
+                            
+                            // PHO columns
+                            $uponCompletionAmount = null;
+                            $dueAfterCompletion = null;
+                            $outstandingAmount = null;
+                            
+                            if ($withPho) {
+                                $uponCompletionAmount = $this->parseCurrencyValue($row[7]);
+                                $dueAfterCompletion = $this->parseCurrencyValue($row[8]);
+                            } else {
+                                $outstandingAmount = $this->parseCurrencyValue($row[7]);
+                            }
 
                             if (empty($unitNumber)) {
                                 $skipped[] = "Row skipped: Empty unit number";
@@ -882,16 +922,29 @@ class UnitController extends Controller
                             }
 
                             // Update payment details
-                            $unit->update([
+                            $updateData = [
                                 'total_unit_price' => $totalUnitPrice,
                                 'dld_fees' => $dldFees,
                                 'admin_fee' => $adminFee,
                                 'amount_to_pay' => $amountToPay,
                                 'total_amount_paid' => $totalAmountPaid,
-                                'outstanding_amount' => $outstandingAmount
-                            ]);
+                                'has_pho' => $withPho,
+                            ];
+                            
+                            if ($withPho) {
+                                $updateData['upon_completion_amount'] = $uponCompletionAmount;
+                                $updateData['due_after_completion'] = $dueAfterCompletion;
+                                $updateData['outstanding_amount'] = null;
+                            } else {
+                                $updateData['outstanding_amount'] = $outstandingAmount;
+                                $updateData['upon_completion_amount'] = null;
+                                $updateData['due_after_completion'] = null;
+                            }
+                            
+                            $unit->update($updateData);
 
                             $updatedCount++;
+                            $updatedUnitIds[] = $unit->id;
                         } catch (\Exception $e) {
                             $errors[] = "Unit {$unitNumber}: " . $e->getMessage();
                         }
@@ -904,6 +957,7 @@ class UnitController extends Controller
                     'success' => true,
                     'message' => "Successfully updated payment details for {$updatedCount} unit(s)",
                     'updated_count' => $updatedCount,
+                    'updated_unit_ids' => $updatedUnitIds,
                     'skipped' => $skipped,
                     'errors' => $errors
                 ], 200);
@@ -932,6 +986,9 @@ class UnitController extends Controller
             'amount_to_pay' => 'nullable|numeric',
             'total_amount_paid' => 'nullable|numeric',
             'outstanding_amount' => 'nullable|numeric',
+            'upon_completion_amount' => 'nullable|numeric',
+            'due_after_completion' => 'nullable|numeric',
+            'has_pho' => 'nullable|boolean',
         ]);
 
         try {
@@ -945,6 +1002,9 @@ class UnitController extends Controller
                 'amount_to_pay' => $request->amount_to_pay,
                 'total_amount_paid' => $request->total_amount_paid,
                 'outstanding_amount' => $request->outstanding_amount,
+                'upon_completion_amount' => $request->upon_completion_amount,
+                'due_after_completion' => $request->due_after_completion,
+                'has_pho' => $request->has_pho ?? false,
             ]);
 
             // Generate SOA
@@ -1469,19 +1529,32 @@ class UnitController extends Controller
      */
     public function bulkGenerateSOA(Request $request)
     {
-        \Log::info("=== BULK SOA GENERATION STARTED v1.0.37 ===", [
+        \Log::info("=== BULK SOA GENERATION STARTED v1.0.38 ===", [
             'regenerate' => $request->input('regenerate', false),
+            'with_pho' => $request->input('with_pho', false),
+            'unit_ids' => $request->input('unit_ids'),
             'user' => $request->user()->full_name ?? 'Unknown'
         ]);
         
         try {
             $regenerate = $request->input('regenerate', false);
+            $withPho = $request->input('with_pho', false);
+            $specificUnitIds = $request->input('unit_ids'); // Array of unit IDs from CSV upload
             
             if ($regenerate) {
-                // Get all units with owners for regeneration
-                $units = Unit::with(['users', 'attachments'])
-                    ->whereHas('users')
-                    ->get();
+                // Get units for regeneration
+                if ($specificUnitIds && is_array($specificUnitIds) && count($specificUnitIds) > 0) {
+                    // Regenerate only specific units from CSV
+                    $units = Unit::with(['users', 'attachments'])
+                        ->whereIn('id', $specificUnitIds)
+                        ->whereHas('users')
+                        ->get();
+                } else {
+                    // Get all units with owners for regeneration
+                    $units = Unit::with(['users', 'attachments'])
+                        ->whereHas('users')
+                        ->get();
+                }
 
                 // Delete all existing SOAs
                 foreach ($units as $unit) {
@@ -1501,13 +1574,25 @@ class UnitController extends Controller
 
                 $unitIds = $units->pluck('id')->toArray();
             } else {
-                // Get all units without SOA
-                $unitsWithoutSOA = Unit::with(['users', 'attachments'])
-                    ->whereDoesntHave('attachments', function ($query) {
-                        $query->where('type', 'soa');
-                    })
-                    ->whereHas('users') // Only units with owners
-                    ->get();
+                // Get units without SOA
+                if ($specificUnitIds && is_array($specificUnitIds) && count($specificUnitIds) > 0) {
+                    // Generate SOA only for specific units from CSV that don't have SOA
+                    $unitsWithoutSOA = Unit::with(['users', 'attachments'])
+                        ->whereIn('id', $specificUnitIds)
+                        ->whereDoesntHave('attachments', function ($query) {
+                            $query->where('type', 'soa');
+                        })
+                        ->whereHas('users') // Only units with owners
+                        ->get();
+                } else {
+                    // Get all units without SOA
+                    $unitsWithoutSOA = Unit::with(['users', 'attachments'])
+                        ->whereDoesntHave('attachments', function ($query) {
+                            $query->where('type', 'soa');
+                        })
+                        ->whereHas('users') // Only units with owners
+                        ->get();
+                }
 
                 if ($unitsWithoutSOA->isEmpty()) {
                     return response()->json([
@@ -1550,9 +1635,10 @@ class UnitController extends Controller
                 \Log::info("Dispatching SOA job", [
                     'job_number' => $index + 1,
                     'unit_id' => $unitId,
-                    'batch_id' => $batchId
+                    'batch_id' => $batchId,
+                    'with_pho' => $withPho
                 ]);
-                \App\Jobs\GenerateSOAJob::dispatch($unitId, $batchId, $adminName);
+                \App\Jobs\GenerateSOAJob::dispatch($unitId, $batchId, $adminName, $withPho);
             }
 
             \Log::info("All jobs dispatched successfully", [

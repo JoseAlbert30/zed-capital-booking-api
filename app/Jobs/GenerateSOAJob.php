@@ -20,17 +20,19 @@ class GenerateSOAJob implements ShouldQueue
     public $unitId;
     public $batchId;
     public $adminName;
+    public $withPho;
     public $tries = 3;
     public $timeout = 120;
 
     /**
      * Create a new job instance.
      */
-    public function __construct($unitId, $batchId = null, $adminName = 'System')
+    public function __construct($unitId, $batchId = null, $adminName = 'System', $withPho = false)
     {
         $this->unitId = $unitId;
         $this->batchId = $batchId;
         $this->adminName = $adminName;
+        $this->withPho = $withPho;
     }
 
     /**
