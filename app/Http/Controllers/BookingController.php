@@ -1233,11 +1233,49 @@ class BookingController extends Controller
                 ->setOption('isHtml5ParserEnabled', true)
                 ->setOption('isRemoteEnabled', true);
 
-            // Return PDF as base64 for frontend handling
+            // Save PDF directly to storage
+            $unit = $booking->unit;
+            $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
+            $filename = 'handover_checklist_' . time() . '.pdf';
+            $storagePath = $folderPath . '/' . $filename;
+            
+            // Delete existing handover checklist if it exists
+            $existingAttachment = $unit->attachments()->where('type', 'handover_checklist')->first();
+            if ($existingAttachment) {
+                \Storage::disk('public')->delete($folderPath . '/' . $existingAttachment->filename);
+                $existingAttachment->delete();
+            }
+            
+            // Save the PDF
+            \Storage::disk('public')->put($storagePath, $pdf->output());
+            
+            // Create attachment record
+            $attachment = $unit->attachments()->create([
+                'filename' => $filename,
+                'type' => 'handover_checklist',
+            ]);
+            
+            // Update booking record with path
+            $booking->update([
+                'handover_checklist' => $storagePath,
+            ]);
+            
+            // Add remark for file generation
+            Remark::create([
+                'unit_id' => $unit->id,
+                'user_id' => $booking->user_id,
+                'date' => now()->toDateString(),
+                'time' => now()->toTimeString(),
+                'event' => 'Handover Checklist generated and saved for booking #' . $booking->id,
+                'type' => 'handover',
+                'admin_user_id' => Auth::id(),
+            ]);
+
             return response()->json([
                 'success' => true,
-                'pdf_content' => base64_encode($pdf->output()),
-                'filename' => 'Handover_Checklist_' . $booking->id . '_' . now()->format('Ymd_His') . '.pdf'
+                'message' => 'Handover checklist generated and saved successfully',
+                'attachment' => $attachment,
+                'path' => $storagePath,
             ]);
         } catch (\Exception $e) {
             return response()->json([
