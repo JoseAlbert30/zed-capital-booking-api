@@ -1109,7 +1109,6 @@ class UnitController extends Controller
 
             // Developer requirements
             $developerRequirements = [
-                ['type' => 'service_charge_ack_developer', 'label' => 'Service Charge Acknowledgement (Signed by Developer)', 'required' => true],
                 ['type' => 'developer_noc_signed', 'label' => 'Developer NOC (Signed by Developer)', 'required' => true],
             ];
 
@@ -1930,7 +1929,6 @@ class UnitController extends Controller
 
         // Developer requirements
         $developerRequirements = [
-            'service_charge_ack_developer',
             'developer_noc_signed'
         ];
 
