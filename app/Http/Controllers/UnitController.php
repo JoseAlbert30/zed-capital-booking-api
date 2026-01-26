@@ -1336,6 +1336,109 @@ class UnitController extends Controller
     }
 
     /**
+     * Bulk send SOA payment reminder emails (queued)
+     */
+    public function bulkSendSOAEmail(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'unit_ids' => 'required|array',
+                'unit_ids.*' => 'required|integer|exists:units,id',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $unitIds = $request->input('unit_ids');
+            $adminName = $request->user()->full_name ?? 'System';
+            $queuedCount = 0;
+            $skipped = [];
+            $validUnitIds = [];
+
+            foreach ($unitIds as $unitId) {
+                try {
+                    // Quick validation before queuing
+                    $unit = Unit::with(['users', 'attachments'])->findOrFail($unitId);
+                    
+                    // Check if has SOA
+                    $hasSOA = $unit->attachments->where('type', 'soa')->isNotEmpty();
+                    if (!$hasSOA) {
+                        $skipped[] = [
+                            'unit_id' => $unitId,
+                            'unit' => $unit->unit,
+                            'reason' => 'No SOA uploaded'
+                        ];
+                        continue;
+                    }
+
+                    // Check if has owners
+                    if ($unit->users->isEmpty()) {
+                        $skipped[] = [
+                            'unit_id' => $unitId,
+                            'unit' => $unit->unit,
+                            'reason' => 'No owners assigned'
+                        ];
+                        continue;
+                    }
+
+                    $validUnitIds[] = $unitId;
+                    $queuedCount++;
+
+                } catch (\Exception $e) {
+                    $skipped[] = [
+                        'unit_id' => $unitId,
+                        'reason' => $e->getMessage()
+                    ];
+                }
+            }
+
+            // Create batch tracking record (reuse HandoverEmailBatch model)
+            $batchId = \Illuminate\Support\Str::uuid()->toString();
+            $batch = \App\Models\HandoverEmailBatch::create([
+                'batch_id' => $batchId,
+                'total_emails' => $queuedCount,
+                'sent_count' => 0,
+                'failed_count' => 0,
+                'status' => 'processing',
+                'unit_ids' => $validUnitIds,
+                'initiated_by' => $adminName,
+                'started_at' => now()
+            ]);
+
+            // Dispatch jobs with batch ID
+            foreach ($validUnitIds as $unitId) {
+                \App\Jobs\SendSOAEmailJob::dispatch($unitId, $adminName, $batchId);
+            }
+
+            $message = "Queued {$queuedCount} SOA email(s) for sending.";
+            if (count($skipped) > 0) {
+                $message .= " Skipped " . count($skipped) . " unit(s).";
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'queued_count' => $queuedCount,
+                'skipped' => $skipped,
+                'batch_id' => $batchId
+            ], 200);
+
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to queue SOA emails',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Bulk send handover emails (queued)
      */
     public function bulkSendHandoverEmail(Request $request)

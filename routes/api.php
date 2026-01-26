@@ -88,6 +88,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/bulk-upload-soa', [UnitController::class, 'bulkUploadSOA']);
         Route::post('/upload-payment-details', [UnitController::class, 'uploadPaymentDetails']);
         Route::post('/bulk-send-handover', [UnitController::class, 'bulkSendHandoverEmail']);
+        Route::post('/bulk-send-soa-email', [UnitController::class, 'bulkSendSOAEmail']);
         Route::get('/check-soa-status', [UnitController::class, 'checkSOAStatus']);
         Route::post('/bulk-generate-soa', [UnitController::class, 'bulkGenerateSOA']);
         Route::get('/download-all-soas', [UnitController::class, 'downloadAllSOAs']);
