@@ -143,7 +143,10 @@ class BookingController extends Controller
         $validator = Validator::make($request->all(), [
             'unit_id' => 'required|exists:units,id',
             'booked_date' => 'required|date|after:today',
-            'booked_time' => 'required|string|in:09:00,10:00,11:00,12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00',
+            'booked_time' => 'required|string|in:09:00,10:00,11:00,12:00,13:00,14:00,15:00,16:00,17:00',
+            'is_owner_attending' => 'required|boolean',
+            'poa_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'attorney_id_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
 
         if ($validator->fails()) {
@@ -185,79 +188,114 @@ class BookingController extends Controller
             return response()->json(['message' => 'Time slot already booked'], 409);
         }
 
+        // Handle POA file uploads if owner is not attending
+        $poaDocumentPath = null;
+        $attorneyIdPath = null;
+        $isOwnerAttending = $request->input('is_owner_attending', true);
+        $bookingStatus = 'confirmed';
+
+        if (!$isOwnerAttending) {
+            if ($request->hasFile('poa_document')) {
+                $poaFile = $request->file('poa_document');
+                $poaFileName = 'poa_' . time() . '_' . $poaFile->getClientOriginalName();
+                $poaDocumentPath = $poaFile->storeAs('bookings/poa', $poaFileName, 'public');
+            }
+
+            if ($request->hasFile('attorney_id_document')) {
+                $idFile = $request->file('attorney_id_document');
+                $idFileName = 'attorney_id_' . time() . '_' . $idFile->getClientOriginalName();
+                $attorneyIdPath = $idFile->storeAs('bookings/poa', $idFileName, 'public');
+            }
+
+            // Set status to pending approval if POA documents are uploaded
+            $bookingStatus = 'pending_poa_approval';
+        }
+
         // Create booking
         $booking = Booking::create([
             'user_id' => $user->id,
             'unit_id' => $request->unit_id,
             'booked_date' => $request->booked_date,
             'booked_time' => $request->booked_time,
+            'is_owner_attending' => $isOwnerAttending,
+            'poa_document' => $poaDocumentPath,
+            'attorney_id_document' => $attorneyIdPath,
+            'status' => $bookingStatus,
         ]);
 
         // Add remark for booking creation to the unit
         $formattedDate = Carbon::parse($request->booked_date)->format('M d, Y');
+        $attendanceStatus = $isOwnerAttending ? 'by owner' : 'with POA (pending approval)';
         $unit->remarks()->create([
             'date' => now()->format('Y-m-d'),
             'time' => now()->format('H:i:s'),
-            'event' => "Handover appointment booked for {$formattedDate} at {$request->booked_time} by {$user->full_name}",
+            'event' => "Handover appointment booked for {$formattedDate} at {$request->booked_time} {$attendanceStatus} - {$user->full_name}",
             'type' => 'booking_created',
             'admin_name' => $user->full_name,
         ]);
 
-        // Send booking confirmation email
-        try {
-            // Get all owners of this unit
-            $allOwners = $unit->users;
-            
-            // Prepare first names for greeting
-            $firstNames = $allOwners->map(function($owner) {
-                return explode(' ', trim($owner->full_name))[0];
-            })->toArray();
-            
-            // Format the greeting
-            if (count($firstNames) == 1) {
-                $greeting = $firstNames[0];
-            } elseif (count($firstNames) == 2) {
-                $greeting = $firstNames[0] . ' & ' . $firstNames[1];
-            } else {
-                $lastNames = array_pop($firstNames);
-                $greeting = implode(', ', $firstNames) . ', & ' . $lastNames;
-            }
-            
-            $appointmentDate = Carbon::parse($request->booked_date)->format('l, F j, Y');
-            $appointmentTime = $request->booked_time;
-            
-            // Send email to all owners
-            Mail::send('emails.booking-confirmation', [
-                'firstName' => $greeting,
-                'appointmentDate' => $appointmentDate,
-                'appointmentTime' => $appointmentTime,
-                'unitNumber' => $unit->unit,
-                'locationPin' => $unit->property->project_name . ', Dubai Land, Dubai',
-                'unit' => $unit,
-                'property' => $unit->property,
-            ], function ($mail) use ($allOwners, $unit) {
-                foreach ($allOwners as $owner) {
-                    $mail->to($owner->email, $owner->full_name);
+        // Send booking confirmation email only if status is confirmed (owner attending)
+        if ($bookingStatus === 'confirmed') {
+            try {
+                // Get all owners of this unit
+                $allOwners = $unit->users;
+                
+                // Prepare first names for greeting
+                $firstNames = $allOwners->map(function($owner) {
+                    return explode(' ', trim($owner->full_name))[0];
+                })->toArray();
+                
+                // Format the greeting
+                if (count($firstNames) == 1) {
+                    $greeting = $firstNames[0];
+                } elseif (count($firstNames) == 2) {
+                    $greeting = $firstNames[0] . ' & ' . $firstNames[1];
+                } else {
+                    $lastNames = array_pop($firstNames);
+                    $greeting = implode(', ', $firstNames) . ', & ' . $lastNames;
                 }
-                $mail->subject('Handover Appointment Confirmation - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
-            });
+                
+                $appointmentDate = Carbon::parse($request->booked_date)->format('l, F j, Y');
+                $appointmentTime = $request->booked_time;
+                
+                // Send email to all owners
+                Mail::send('emails.booking-confirmation', [
+                    'firstName' => $greeting,
+                    'appointmentDate' => $appointmentDate,
+                    'appointmentTime' => $appointmentTime,
+                    'unitNumber' => $unit->unit,
+                    'locationPin' => $unit->property->project_name . ', Dubai Land, Dubai',
+                    'unit' => $unit,
+                    'property' => $unit->property,
+                ], function ($mail) use ($allOwners, $unit) {
+                    foreach ($allOwners as $owner) {
+                        $mail->to($owner->email, $owner->full_name);
+                    }
+                    $mail->subject('Handover Appointment Confirmation - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
+                });
 
-            // Add remark for confirmation email sent to unit
-            $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
-                'event' => "Booking confirmation email sent to " . count($allOwners) . " owner(s) for appointment on {$formattedDate} at {$request->booked_time}",
-                'type' => 'email_sent',
-                'admin_name' => 'System',
-            ]);
+                // Add remark for confirmation email sent to unit
+                $unit->remarks()->create([
+                    'date' => now()->format('Y-m-d'),
+                    'time' => now()->format('H:i:s'),
+                    'event' => "Booking confirmation email sent to " . count($allOwners) . " owner(s) for appointment on {$formattedDate} at {$request->booked_time}",
+                    'type' => 'email_sent',
+                    'admin_name' => 'System',
+                ]);
 
-        } catch (\Exception $e) {
-            // Don't fail the booking if email fails
+            } catch (\Exception $e) {
+                // Don't fail the booking if email fails
+            }
         }
 
+        $message = $bookingStatus === 'pending_poa_approval' 
+            ? 'Booking submitted successfully. Your POA documents are under review. You will receive a confirmation email once approved.'
+            : 'Booking created successfully';
+
         return response()->json([
-            'message' => 'Booking created successfully',
+            'message' => $message,
             'booking' => $booking,
+            'status' => $bookingStatus,
         ], 201);
     }
 
@@ -478,6 +516,168 @@ class BookingController extends Controller
             ->delete();
 
         return response()->json(['message' => 'Booking deleted successfully']);
+    }
+
+    /**
+     * Approve or reject a POA booking
+     */
+    public function approvePoaBooking(Request $request, Booking $booking): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'action' => 'required|in:approve,reject',
+            'rejection_reason' => 'required_if:action,reject|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        if ($booking->status !== 'pending_poa_approval') {
+            return response()->json(['message' => 'This booking is not pending POA approval'], 400);
+        }
+
+        $action = $request->input('action');
+        $unit = $booking->unit;
+
+        if ($action === 'approve') {
+            // Approve the booking
+            $booking->status = 'confirmed';
+            $booking->save();
+
+            // Add remark for POA approval
+            $formattedDate = Carbon::parse($booking->booked_date)->format('M d, Y');
+            $unit->remarks()->create([
+                'date' => now()->format('Y-m-d'),
+                'time' => now()->format('H:i:s'),
+                'event' => "POA booking approved for appointment on {$formattedDate} at {$booking->booked_time} - Approved by {$user->full_name}",
+                'type' => 'poa_approved',
+                'admin_name' => $user->full_name,
+            ]);
+
+            // Send confirmation email to all owners
+            try {
+                $allOwners = $unit->users;
+                
+                // Prepare first names for greeting
+                $firstNames = $allOwners->map(function($owner) {
+                    return explode(' ', trim($owner->full_name))[0];
+                })->toArray();
+                
+                // Format the greeting
+                if (count($firstNames) == 1) {
+                    $greeting = $firstNames[0];
+                } elseif (count($firstNames) == 2) {
+                    $greeting = $firstNames[0] . ' & ' . $firstNames[1];
+                } else {
+                    $lastNames = array_pop($firstNames);
+                    $greeting = implode(', ', $firstNames) . ', & ' . $lastNames;
+                }
+                
+                $appointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
+                $appointmentTime = $booking->booked_time;
+                
+                // Send confirmation email
+                Mail::send('emails.booking-confirmation', [
+                    'firstName' => $greeting,
+                    'appointmentDate' => $appointmentDate,
+                    'appointmentTime' => $appointmentTime,
+                    'unitNumber' => $unit->unit,
+                    'locationPin' => $unit->property->project_name . ', Dubai Land, Dubai',
+                    'unit' => $unit,
+                    'property' => $unit->property,
+                    'isPOA' => true,
+                ], function ($mail) use ($allOwners, $unit) {
+                    foreach ($allOwners as $owner) {
+                        $mail->to($owner->email, $owner->full_name);
+                    }
+                    $mail->subject('Handover Appointment Confirmed (POA Approved) - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
+                });
+
+                // Add remark for confirmation email sent
+                $unit->remarks()->create([
+                    'date' => now()->format('Y-m-d'),
+                    'time' => now()->format('H:i:s'),
+                    'event' => "POA approval confirmation email sent to " . count($allOwners) . " owner(s) for appointment on {$formattedDate} at {$booking->booked_time}",
+                    'type' => 'email_sent',
+                    'admin_name' => 'System',
+                ]);
+
+            } catch (\Exception $e) {
+                // Don't fail if email fails
+            }
+
+            return response()->json([
+                'message' => 'POA booking approved and confirmation email sent',
+                'booking' => $booking,
+            ]);
+
+        } else {
+            // Reject the booking
+            $rejectionReason = $request->input('rejection_reason');
+            
+            // Add remark for POA rejection
+            $formattedDate = Carbon::parse($booking->booked_date)->format('M d, Y');
+            $unit->remarks()->create([
+                'date' => now()->format('Y-m-d'),
+                'time' => now()->format('H:i:s'),
+                'event' => "POA booking rejected for appointment on {$formattedDate} at {$booking->booked_time} - Rejected by {$user->full_name}. Reason: {$rejectionReason}",
+                'type' => 'poa_rejected',
+                'admin_name' => $user->full_name,
+            ]);
+
+            // Send rejection email to all owners
+            try {
+                $allOwners = $unit->users;
+                
+                $firstNames = $allOwners->map(function($owner) {
+                    return explode(' ', trim($owner->full_name))[0];
+                })->toArray();
+                
+                if (count($firstNames) == 1) {
+                    $greeting = $firstNames[0];
+                } elseif (count($firstNames) == 2) {
+                    $greeting = $firstNames[0] . ' & ' . $firstNames[1];
+                } else {
+                    $lastNames = array_pop($firstNames);
+                    $greeting = implode(', ', $firstNames) . ', & ' . $lastNames;
+                }
+                
+                $appointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
+                $appointmentTime = $booking->booked_time;
+                
+                // Send rejection email (you'll need to create this email template)
+                Mail::send('emails.poa-rejection', [
+                    'firstName' => $greeting,
+                    'appointmentDate' => $appointmentDate,
+                    'appointmentTime' => $appointmentTime,
+                    'unitNumber' => $unit->unit,
+                    'rejectionReason' => $rejectionReason,
+                    'unit' => $unit,
+                    'property' => $unit->property,
+                ], function ($mail) use ($allOwners, $unit) {
+                    foreach ($allOwners as $owner) {
+                        $mail->to($owner->email, $owner->full_name);
+                    }
+                    $mail->subject('Handover Appointment POA Rejected - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
+                });
+
+            } catch (\Exception $e) {
+                // Don't fail if email fails
+            }
+
+            // Delete the booking
+            $booking->delete();
+
+            return response()->json([
+                'message' => 'POA booking rejected and notification sent',
+            ]);
+        }
     }
 
     public function availableSlots(Request $request): JsonResponse

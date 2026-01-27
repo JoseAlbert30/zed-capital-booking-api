@@ -105,7 +105,6 @@
                 <li>Please arrive 10 minutes prior to your scheduled appointment time.</li>
                 <li>Bring your original Emirates ID or passport for verification.</li>
                 <li>If a representative is attending on your behalf, ensure they carry a valid Power of Attorney.</li>
-                <li>The handover process typically takes 1-2 hours.</li>
             </ul>
 
             <p>If you need to make further changes or have any questions, please contact us at <a href="mailto:vantage@zedcapital.ae" style="color: #0066cc; text-decoration: none;"><strong>vantage@zedcapital.ae</strong></a></p>

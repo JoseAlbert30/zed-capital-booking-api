@@ -16,6 +16,9 @@ class Booking extends Model
         'booked_date',
         'booked_time',
         'status',
+        'is_owner_attending',
+        'poa_document',
+        'attorney_id_document',
         'handover_checklist',
         'handover_declaration',
         'handover_photo',
@@ -32,6 +35,7 @@ class Booking extends Model
         'handover_completed_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'is_owner_attending' => 'boolean',
         'declaration_part1_signatures' => 'array',
         'declaration_part2_signatures' => 'array',
         'declaration_part3_signatures' => 'array',
@@ -42,6 +46,8 @@ class Booking extends Model
         'handover_declaration_url',
         'handover_photo_url',
         'client_signature_url',
+        'poa_document_url',
+        'attorney_id_document_url',
     ];
 
     public function user(): BelongsTo
@@ -104,5 +110,27 @@ class Booking extends Model
             return null;
         }
         return url('storage/' . $this->client_signature);
+    }
+
+    /**
+     * Get the full URL for POA document.
+     */
+    public function getPoaDocumentUrlAttribute(): ?string
+    {
+        if (!$this->poa_document) {
+            return null;
+        }
+        return url('storage/' . $this->poa_document);
+    }
+
+    /**
+     * Get the full URL for attorney ID document.
+     */
+    public function getAttorneyIdDocumentUrlAttribute(): ?string
+    {
+        if (!$this->attorney_id_document) {
+            return null;
+        }
+        return url('storage/' . $this->attorney_id_document);
     }
 }

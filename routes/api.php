@@ -66,6 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{booking}', [BookingController::class, 'show']);
         Route::put('/{booking}', [BookingController::class, 'update']);
         Route::delete('/{booking}', [BookingController::class, 'destroy']);
+        Route::post('/{booking}/approve-poa', [BookingController::class, 'approvePoaBooking']);
         Route::get('/{booking}/templates', [BookingController::class, 'getTemplates']);
         Route::post('/{booking}/upload-handover-file', [BookingController::class, 'uploadHandoverFile']);
         Route::delete('/{booking}/delete-handover-file', [BookingController::class, 'deleteHandoverFile']);
