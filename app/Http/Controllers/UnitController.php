@@ -1600,13 +1600,27 @@ class UnitController extends Controller
     /**
      * Check SOA generation status for all units
      */
-    public function checkSOAStatus()
+    public function checkSOAStatus(Request $request)
     {
         try {
-            $totalUnits = Unit::whereHas('users')->count();
-            $unitsWithSOA = Unit::whereHas('attachments', function ($query) {
-                $query->where('type', 'soa');
+            $specificUnitIds = $request->input('unit_ids');
+            
+            // Build base query for units with owners
+            $query = Unit::whereHas('users');
+            
+            // If specific unit IDs provided, filter by them
+            if ($specificUnitIds && is_array($specificUnitIds) && count($specificUnitIds) > 0) {
+                $query->whereIn('id', $specificUnitIds);
+            }
+            
+            $totalUnits = $query->count();
+            
+            // Count units with SOA
+            $withSOAQuery = clone $query;
+            $unitsWithSOA = $withSOAQuery->whereHas('attachments', function ($q) {
+                $q->where('type', 'soa');
             })->count();
+            
             $unitsWithoutSOA = $totalUnits - $unitsWithSOA;
 
             return response()->json([
@@ -1614,7 +1628,8 @@ class UnitController extends Controller
                 'total_units' => $totalUnits,
                 'units_with_soa' => $unitsWithSOA,
                 'units_without_soa' => $unitsWithoutSOA,
-                'all_generated' => $unitsWithoutSOA === 0
+                'all_generated' => $unitsWithoutSOA === 0,
+                'filtered_by_upload' => !empty($specificUnitIds)
             ], 200);
 
         } catch (\Exception $e) {
@@ -1651,11 +1666,17 @@ class UnitController extends Controller
                         ->whereIn('id', $specificUnitIds)
                         ->whereHas('users')
                         ->get();
+                    
+                    \Log::info("Regenerating specific units from CSV", [
+                        'unit_count' => count($specificUnitIds)
+                    ]);
                 } else {
-                    // Get all units with owners for regeneration
-                    $units = Unit::with(['users', 'attachments'])
-                        ->whereHas('users')
-                        ->get();
+                    // No specific units - require confirmation via explicit flag
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please upload a CSV file or specify which units to regenerate',
+                        'queued_count' => 0
+                    ], 400);
                 }
 
                 // Delete all existing SOAs
@@ -1677,6 +1698,8 @@ class UnitController extends Controller
                 $unitIds = $units->pluck('id')->toArray();
             } else {
                 // Get units without SOA
+                // ONLY process specific units if unit_ids provided
+                // This prevents accidentally generating SOAs for ALL units
                 if ($specificUnitIds && is_array($specificUnitIds) && count($specificUnitIds) > 0) {
                     // Generate SOA only for specific units from CSV that don't have SOA
                     $unitsWithoutSOA = Unit::with(['users', 'attachments'])
@@ -1686,20 +1709,24 @@ class UnitController extends Controller
                         })
                         ->whereHas('users') // Only units with owners
                         ->get();
+                    
+                    \Log::info("Processing specific units from CSV", [
+                        'requested_count' => count($specificUnitIds),
+                        'units_without_soa' => $unitsWithoutSOA->count()
+                    ]);
                 } else {
-                    // Get all units without SOA
-                    $unitsWithoutSOA = Unit::with(['users', 'attachments'])
-                        ->whereDoesntHave('attachments', function ($query) {
-                            $query->where('type', 'soa');
-                        })
-                        ->whereHas('users') // Only units with owners
-                        ->get();
+                    // No specific units provided - return error to prevent bulk generation
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please upload a CSV file with unit payment details first',
+                        'queued_count' => 0
+                    ], 400);
                 }
 
                 if ($unitsWithoutSOA->isEmpty()) {
                     return response()->json([
                         'success' => true,
-                        'message' => 'All units already have SOA',
+                        'message' => 'All specified units already have SOA',
                         'queued_count' => 0
                     ], 200);
                 }
