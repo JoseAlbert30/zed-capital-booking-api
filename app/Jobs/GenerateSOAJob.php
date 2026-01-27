@@ -118,8 +118,11 @@ class GenerateSOAJob implements ShouldQueue
             Log::info("Generating PDF", [
                 'with_pho_param' => $this->withPho,
                 'unit_has_pho' => $unit->has_pho,
+                'unit_has_pho_raw' => $unit->getAttributes()['has_pho'] ?? null,
                 'unit_id' => $unit->id,
-                'unit_number' => $unit->unit
+                'unit_number' => $unit->unit,
+                'upon_completion_amount' => $unit->upon_completion_amount,
+                'due_after_completion' => $unit->due_after_completion
             ]);
             $pdf = PDF::loadView('pdfs.soa', [
                 'unit' => $unit,

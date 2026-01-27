@@ -364,7 +364,7 @@
             </tr>
             @endif
             
-            @if($unit->has_pho)
+            @if($unit->has_pho == 1 || $unit->has_pho === true)
                 @if($unit->upon_completion_amount !== null)
                 <tr>
                     <td>Upon Completion Amount To Pay</td>
@@ -393,7 +393,7 @@
         </tbody>
     </table>
 
-    @if($unit->has_pho)
+    @if($unit->has_pho == 1 || $unit->has_pho === true)
     <div class="summary-box">
         <div class="summary-row">
             <div class="summary-label">Payment Status:</div>
