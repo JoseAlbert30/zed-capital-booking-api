@@ -318,6 +318,17 @@
         @endif
     </div>
 
+    {{-- DEBUG INFO --}}
+    <div style="background: yellow; padding: 10px; margin: 10px 0; border: 2px solid red;">
+        <strong>DEBUG INFO:</strong><br>
+        has_pho value: {{ var_export($unit->has_pho, true) }}<br>
+        has_pho == 1: {{ var_export($unit->has_pho == 1, true) }}<br>
+        has_pho === true: {{ var_export($unit->has_pho === true, true) }}<br>
+        upon_completion_amount: {{ $unit->upon_completion_amount ?? 'NULL' }}<br>
+        due_after_completion: {{ $unit->due_after_completion ?? 'NULL' }}<br>
+        outstanding_amount: {{ $unit->outstanding_amount ?? 'NULL' }}
+    </div>
+
     @if($unit->total_unit_price !== null || $unit->dld_fees !== null || $unit->admin_fee !== null)
     <div class="section-title">Payment Breakdown</div>
     
