@@ -391,7 +391,7 @@
         </tbody>
     </table>
 
-    @if($unit->upon_completion_amount !== null && $unit->due_after_completion !== null)
+    @if($unit->has_pho && $unit->due_after_completion !== null)
     <div class="summary-box">
         <div class="summary-row">
             <div class="summary-label">Payment Status:</div>
@@ -422,7 +422,7 @@
         </div>
         @endif
     </div>
-    @else
+    @elseif(!$unit->has_pho && $unit->outstanding_amount !== null)
     <div class="summary-box">
         <div class="summary-row">
             <div class="summary-label">Payment Status:</div>
