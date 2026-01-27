@@ -364,34 +364,36 @@
             </tr>
             @endif
             
-            @if($unit->has_pho && $unit->upon_completion_amount !== null)
-            <tr>
-                <td>Upon Completion Amount To Pay</td>
-                <td class="text-right amount">{{ number_format($unit->upon_completion_amount, 2) }}</td>
-            </tr>
-            @endif
-            
-            @if($unit->has_pho && $unit->due_after_completion !== null)
-            <tr class="outstanding-row">
-                <td><strong>Due After Completion</strong></td>
-                <td class="text-right amount" style="color: {{ $unit->due_after_completion > 0 ? '#dc3545' : '#28a745' }};">
-                    {{ number_format($unit->due_after_completion, 2) }}
-                </td>
-            </tr>
-            @endif
-            
-            @if(!$unit->has_pho && $unit->outstanding_amount !== null)
-            <tr class="outstanding-row">
-                <td><strong>Outstanding Balance</strong></td>
-                <td class="text-right amount" style="color: {{ $unit->outstanding_amount > 0 ? '#dc3545' : '#28a745' }};">
-                    {{ number_format($unit->outstanding_amount, 2) }}
-                </td>
-            </tr>
+            @if($unit->has_pho)
+                @if($unit->upon_completion_amount !== null)
+                <tr>
+                    <td>Upon Completion Amount To Pay</td>
+                    <td class="text-right amount">{{ number_format($unit->upon_completion_amount, 2) }}</td>
+                </tr>
+                @endif
+                
+                @if($unit->due_after_completion !== null)
+                <tr class="outstanding-row">
+                    <td><strong>Due After Completion</strong></td>
+                    <td class="text-right amount" style="color: {{ $unit->due_after_completion > 0 ? '#dc3545' : '#28a745' }};">
+                        {{ number_format($unit->due_after_completion, 2) }}
+                    </td>
+                </tr>
+                @endif
+            @else
+                @if($unit->outstanding_amount !== null)
+                <tr class="outstanding-row">
+                    <td><strong>Outstanding Balance</strong></td>
+                    <td class="text-right amount" style="color: {{ $unit->outstanding_amount > 0 ? '#dc3545' : '#28a745' }};">
+                        {{ number_format($unit->outstanding_amount, 2) }}
+                    </td>
+                </tr>
+                @endif
             @endif
         </tbody>
     </table>
 
-    @if(isset($withPho) && $withPho && $unit->due_after_completion !== null)
+    @if($unit->has_pho)
     <div class="summary-box">
         <div class="summary-row">
             <div class="summary-label">Payment Status:</div>
@@ -422,7 +424,7 @@
         </div>
         @endif
     </div>
-    @elseif((!isset($withPho) || !$withPho) && $unit->outstanding_amount !== null)
+    @else
     <div class="summary-box">
         <div class="summary-row">
             <div class="summary-label">Payment Status:</div>

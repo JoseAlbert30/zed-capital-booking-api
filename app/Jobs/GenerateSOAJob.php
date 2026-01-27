@@ -115,12 +115,16 @@ class GenerateSOAJob implements ShouldQueue
             }
 
             // Generate PDF with new template
-            Log::info("Generating PDF", ['with_pho' => $this->withPho]);
+            Log::info("Generating PDF", [
+                'with_pho_param' => $this->withPho,
+                'unit_has_pho' => $unit->has_pho,
+                'unit_id' => $unit->id,
+                'unit_number' => $unit->unit
+            ]);
             $pdf = PDF::loadView('pdfs.soa', [
                 'unit' => $unit,
                 'owners' => $owners,
                 'property' => $unit->property,
-                'withPho' => $this->withPho,
                 'logos' => [
                     'left' => $vieraLogo,
                     'right' => $vantageLogo
