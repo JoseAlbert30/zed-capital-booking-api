@@ -158,7 +158,6 @@
                 <li>The appointment includes unit, amenities and parking inspection and key handover.</li>
                 <li>Please bring your original Emirates ID or passport for verification.</li>
                 <li>If applicable, please bring Power of Attorney documents.</li>
-                <li>The handover process typically takes 1-2 hours.</li>
                 <li>If you need to reschedule, please contact us at least 24 hours in advance.</li>
             </ul>
 

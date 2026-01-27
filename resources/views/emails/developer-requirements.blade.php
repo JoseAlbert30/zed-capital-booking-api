@@ -203,14 +203,6 @@
 
             <hr style="border: 0; border-top: 1px solid #d6d6d6; margin: 20px 0;">
 
-            <h2>Next Steps</h2>
-            <ol>
-                <li>Review all submitted buyer documents (attached to this email)</li>
-                <li>Download and sign the Service Charge Acknowledgement</li>
-                <li>Download and sign the Developer NOC (No Objection Certificate) - <strong>attached to this email</strong></li>
-                <li>Upload both signed documents to the admin portal</li>
-                <li>System will notify the buyer once all documents are complete</li>
-            </ol>
             <p style="margin-top: 15px; padding: 10px; background: #fff9e6; border-left: 4px solid #ffcc00;">
                 <strong>Note:</strong> All buyer documents and the NOC template are attached to this email for your convenience.
             </p>
