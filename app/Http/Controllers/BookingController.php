@@ -259,6 +259,75 @@ class BookingController extends Controller
             'admin_name' => $user->full_name,
         ]);
 
+        // Send admin notification email
+        try {
+            $isPending = $bookingStatus === 'pending_poa_approval';
+            $allOwners = $unit->users;
+            
+            // Get co-owners information
+            $coOwners = $allOwners->filter(function($owner) use ($user) {
+                return $owner->id !== $user->id;
+            })->map(function($owner) {
+                return [
+                    'name' => $owner->full_name,
+                    'email' => $owner->email,
+                ];
+            })->values()->toArray();
+            
+            $appointmentDate = Carbon::parse($request->booked_date)->format('l, F j, Y');
+            $appointmentTime = $request->booked_time;
+            
+            Mail::send('emails.admin-booking-notification', [
+                'isPending' => $isPending,
+                'propertyName' => $unit->property->project_name,
+                'unitNumber' => $unit->unit,
+                'appointmentDate' => $appointmentDate,
+                'appointmentTime' => $appointmentTime,
+                'customerName' => $user->full_name,
+                'customerEmail' => $user->email,
+                'customerMobile' => $user->mobile_number,
+                'coOwners' => $coOwners,
+            ], function ($mail) use ($isPending, $unit, $request) {
+                $mail->to('albertarnedo03@gmail.com', 'Admin');
+                $mail->subject(
+                    ($isPending ? '[ACTION REQUIRED] POA Approval Needed - ' : 'New Booking - ') . 
+                    'Unit ' . $unit->unit . ', ' . $unit->property->project_name
+                );
+                
+                // Attach POA documents if they exist
+                if ($isPending) {
+                    if ($request->hasFile('poa_document')) {
+                        $poaFile = $request->file('poa_document');
+                        $mail->attach($poaFile->getRealPath(), [
+                            'as' => 'POA_Document_' . $unit->unit . '.' . $poaFile->getClientOriginalExtension(),
+                            'mime' => $poaFile->getMimeType(),
+                        ]);
+                    }
+                    
+                    if ($request->hasFile('attorney_id_document')) {
+                        $idFile = $request->file('attorney_id_document');
+                        $mail->attach($idFile->getRealPath(), [
+                            'as' => 'Representative_ID_' . $unit->unit . '.' . $idFile->getClientOriginalExtension(),
+                            'mime' => $idFile->getMimeType(),
+                        ]);
+                    }
+                }
+            });
+
+            // Add remark for admin notification email sent
+            $unit->remarks()->create([
+                'date' => now()->format('Y-m-d'),
+                'time' => now()->format('H:i:s'),
+                'event' => "Admin notification email sent for " . ($isPending ? 'POA approval' : 'booking confirmation'),
+                'type' => 'email_sent',
+                'admin_name' => 'System',
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Failed to send admin notification email: ' . $e->getMessage());
+            // Don't fail the booking if email fails
+        }
+
         // Send booking confirmation email only if status is confirmed (owner attending)
         if ($bookingStatus === 'confirmed') {
             try {
@@ -908,6 +977,91 @@ class BookingController extends Controller
 
                 // Send congratulations email to all owners/co-owners
                 $this->sendCongratulationsEmail($unit);
+                
+                // Send handover completion notification email to admin with attachments
+                try {
+                    $allOwners = $unit->users;
+                    
+                    // Get co-owners information
+                    $coOwners = $allOwners->filter(function($owner) use ($booking) {
+                        return $owner->id !== $booking->user_id;
+                    })->map(function($owner) {
+                        return [
+                            'name' => $owner->full_name,
+                            'email' => $owner->email,
+                        ];
+                    })->values()->toArray();
+                    
+                    $completionDateTime = \Carbon\Carbon::parse($booking->handover_completed_at);
+                    $appointmentDate = \Carbon\Carbon::parse($booking->booked_date)->format('l, F j, Y');
+                    
+                    Mail::send('emails.admin-handover-completed', [
+                        'propertyName' => $unit->property->project_name,
+                        'unitNumber' => $unit->unit,
+                        'completionDate' => $completionDateTime->format('l, F j, Y'),
+                        'completionTime' => $completionDateTime->format('g:i A'),
+                        'completedBy' => Auth::user()->full_name ?? Auth::user()->email,
+                        'customerName' => $booking->user->full_name,
+                        'customerEmail' => $booking->user->email,
+                        'customerMobile' => $booking->user->mobile_number,
+                        'coOwners' => $coOwners,
+                        'appointmentDate' => $appointmentDate,
+                        'appointmentTime' => $booking->booked_time,
+                    ], function ($mail) use ($booking, $unit) {
+                        $mail->to('albertarnedo03@gmail.com', 'Admin');
+                        $mail->subject('Handover Completed - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
+                        
+                        // Attach declaration PDF
+                        if ($booking->handover_declaration) {
+                            $declarationPath = Storage::disk('public')->path($booking->handover_declaration);
+                            if (file_exists($declarationPath)) {
+                                $mail->attach($declarationPath, [
+                                    'as' => 'Declaration_Unit_' . $unit->unit . '.pdf',
+                                    'mime' => 'application/pdf',
+                                ]);
+                            }
+                        }
+                        
+                        // Attach checklist PDF
+                        if ($booking->handover_checklist) {
+                            $checklistPath = Storage::disk('public')->path($booking->handover_checklist);
+                            if (file_exists($checklistPath)) {
+                                $mail->attach($checklistPath, [
+                                    'as' => 'Checklist_Unit_' . $unit->unit . '.pdf',
+                                    'mime' => 'application/pdf',
+                                ]);
+                            }
+                        }
+                        
+                        // Attach handover photo
+                        if ($booking->handover_photo) {
+                            $photoPath = Storage::disk('public')->path($booking->handover_photo);
+                            if (file_exists($photoPath)) {
+                                $extension = pathinfo($photoPath, PATHINFO_EXTENSION);
+                                $mimeType = 'image/' . ($extension === 'jpg' ? 'jpeg' : $extension);
+                                $mail->attach($photoPath, [
+                                    'as' => 'Handover_Photo_Unit_' . $unit->unit . '.' . $extension,
+                                    'mime' => $mimeType,
+                                ]);
+                            }
+                        }
+                    });
+
+                    // Add remark for admin notification email sent
+                    Remark::create([
+                        'unit_id' => $unit->id,
+                        'user_id' => $booking->user_id,
+                        'date' => now()->toDateString(),
+                        'time' => now()->toTimeString(),
+                        'event' => 'Handover completion notification email sent to admin with attachments',
+                        'type' => 'email_sent',
+                        'admin_user_id' => Auth::id(),
+                    ]);
+
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send handover completion email: ' . $e->getMessage());
+                    // Don't fail the handover completion if email fails
+                }
             }
 
             // Add remark to user timeline
