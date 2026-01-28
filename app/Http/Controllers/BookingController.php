@@ -139,7 +139,7 @@ class BookingController extends Controller
     {
         $user = $request->user();
         
-        // Convert is_owner_attending to boolean if it's a string
+        // Convert is_owner_attending to boolean if it's a string, or set default
         if ($request->has('is_owner_attending')) {
             $isOwnerAttending = $request->input('is_owner_attending');
             if ($isOwnerAttending === '0' || $isOwnerAttending === 0 || $isOwnerAttending === false || $isOwnerAttending === 'false') {
@@ -147,6 +147,9 @@ class BookingController extends Controller
             } else {
                 $request->merge(['is_owner_attending' => true]);
             }
+        } else {
+            // Default to true if not provided
+            $request->merge(['is_owner_attending' => true]);
         }
 
         // Validate input
@@ -154,7 +157,7 @@ class BookingController extends Controller
             'unit_id' => 'required|exists:units,id',
             'booked_date' => 'required|date|after:today',
             'booked_time' => 'required|string|in:09:00,10:00,11:00,12:00,13:00,14:00,15:00,16:00,17:00',
-            'is_owner_attending' => 'nullable|boolean',
+            'is_owner_attending' => 'boolean',
             'poa_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:10240',
             'attorney_id_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
@@ -201,10 +204,19 @@ class BookingController extends Controller
         // Handle POA file uploads if owner is not attending
         $poaDocumentPath = null;
         $attorneyIdPath = null;
-        $isOwnerAttending = $request->input('is_owner_attending', true);
+        // Use the converted boolean value from request (converted earlier in the method)
+        $isOwnerAttending = $request->input('is_owner_attending');
         $bookingStatus = 'confirmed';
 
-        if (!$isOwnerAttending) {
+        \Log::info('POA Booking Debug', [
+            'is_owner_attending_value' => $isOwnerAttending,
+            'type' => gettype($isOwnerAttending),
+            'strict_false_check' => $isOwnerAttending === false,
+            'has_poa_doc' => $request->hasFile('poa_document'),
+            'has_attorney_id' => $request->hasFile('attorney_id_document'),
+        ]);
+
+        if ($isOwnerAttending === false) {
             if ($request->hasFile('poa_document')) {
                 $poaFile = $request->file('poa_document');
                 $poaFileName = 'poa_' . time() . '_' . $poaFile->getClientOriginalName();
@@ -219,6 +231,9 @@ class BookingController extends Controller
 
             // Set status to pending approval if POA documents are uploaded
             $bookingStatus = 'pending_poa_approval';
+            \Log::info('POA Booking: Status set to pending_poa_approval');
+        } else {
+            \Log::info('POA Booking: Owner attending, status remains confirmed');
         }
 
         // Create booking
