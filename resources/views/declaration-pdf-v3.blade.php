@@ -451,6 +451,11 @@
         </table>
     </div>
 
+    <div class="spacer-18"></div>
+    <div style="font-size: 9pt; margin-bottom: 12px;">
+       I hereby confirm that I have read and understood the declaration of adherence and acknowledgement letter and received the keys for the above-mentioned unit.
+    </div>
+
     <table class="sign-table">
         @if(isset($signaturesData['part1']) && is_array($signaturesData['part1']))
             @foreach($signaturesData['part1'] as $signature)
@@ -563,61 +568,6 @@
             @endforeach
         @endif
     </table>
-
-    <div class="page-break"></div>
-    @endif
-
-    {{-- ===================== PAGE 3/4 (ACKNOWLEDGEMENT) ===================== --}}
-    <div class="ack-title">Acknowledgement:</div>
-
-    <div class="ack-box">
-        <table style="width:100%; border-collapse:collapse;">
-            <tr>
-                <td style="width:20%; font-weight:500;">Purchaser Name:</td>
-                <td style="width:40%;">
-                    {{ $purchaser['name'] ?? '' }}@if(isset($coOwners) && count($coOwners) > 0)@foreach($coOwners as $coOwner) & {{ $coOwner->full_name ?? $coOwner->name ?? '' }}@endforeach @endif
-                </td>
-                <td style="width:20%; font-weight:500;" class="right">Unit Number:</td>
-                <td style="width:20%;">
-                    {{ $property['unit_number'] ?? '' }}
-                </td>
-            </tr>
-        </table>
-
-        <div class="spacer-18"></div>
-        <div style="font-size: 9pt;">
-           I hereby confirm that I have read and understood the declaration of adherence and acknowledgement letter and received the keys for the above-mentioned unit.
-        </div>
-
-        <div class="spacer-18"></div>
-
-        <table class="sign-table" style="margin-top: 6px;">
-            @if(isset($signaturesData['part3']) && is_array($signaturesData['part3']))
-                @foreach($signaturesData['part3'] as $signature)
-                <tr>
-                    <td style="width:25%; font-weight:500;">
-                        @if($signature['type'] === 'primary')
-                            Purchaser
-                        @elseif($signature['type'] === 'secondary')
-                            Joint Purchaser
-                        @else
-                            Purchaser POA
-                        @endif
-                    </td>
-                    <td style="width:35%;">
-                        {{ $signature['name'] ?? '' }}
-                    </td>
-                    <td style="width:15%; font-weight:500;" class="center">Signature</td>
-                    <td style="width:25%; text-align:center;">
-                        @if(isset($signature['image']))
-                        <img src="{{ $signature['image'] }}" style="max-height: 40px; max-width: 150px;">
-                        @endif
-                    </td>
-                </tr>
-                @endforeach
-            @endif
-        </table>
-    </div>
 
 </body>
 

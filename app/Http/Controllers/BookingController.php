@@ -1273,16 +1273,13 @@ class BookingController extends Controller
             $signatureImage = $request->input('signature_image', '');
             $signaturesData = $request->input('signatures_data', null);
             
-            // Save signatures to booking
+            // Save signatures to booking (only Part 1 and Part 2)
             if ($signaturesData) {
                 if (isset($signaturesData['part1']) && !empty($signaturesData['part1'])) {
                     $booking->declaration_part1_signatures = $signaturesData['part1'];
                 }
                 if (isset($signaturesData['part2']) && !empty($signaturesData['part2'])) {
                     $booking->declaration_part2_signatures = $signaturesData['part2'];
-                }
-                if (isset($signaturesData['part3']) && !empty($signaturesData['part3'])) {
-                    $booking->declaration_part3_signatures = $signaturesData['part3'];
                 }
                 $booking->save();
             }
