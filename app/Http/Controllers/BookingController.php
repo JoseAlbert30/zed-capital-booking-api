@@ -158,8 +158,8 @@ class BookingController extends Controller
             'booked_date' => 'required|date|after:today',
             'booked_time' => 'required|string|in:09:00,10:00,11:00,12:00,13:00,14:00,15:00,16:00,17:00',
             'is_owner_attending' => 'boolean',
-            'poa_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'attorney_id_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'poa_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'attorney_id_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
 
         if ($validator->fails()) {
