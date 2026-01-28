@@ -870,24 +870,15 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Validate that all files are uploaded
+        // Validate that all required files are uploaded
         if (!$booking->handover_checklist || !$booking->handover_declaration || 
-            !$booking->handover_photo || !$booking->client_signature) {
+            !$booking->handover_photo) {
             return response()->json([
                 'message' => 'All handover files must be uploaded before completing'
             ], 422);
         }
 
-        // Check for unresolved snagging defects
-        $unresolvedDefects = SnaggingDefect::where('booking_id', $booking->id)
-            ->where('resolved', false)
-            ->count();
-
-        if ($unresolvedDefects > 0) {
-            return response()->json([
-                'message' => "Cannot complete handover. There are {$unresolvedDefects} unresolved snagging defect(s). Please resolve all defects before completing."
-            ], 422);
-        }
+        // Note: Snagging defects validation removed - defects can exist as long as declaration is signed
 
         try {
             $unit = $booking->unit;

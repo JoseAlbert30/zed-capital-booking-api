@@ -543,34 +543,63 @@
         </div>
 
         <table class="sign-table">
-            <tr>
-                <td class="sign-name">Purchaser</td>
-                <td class="sign-line">
-                    <span style="text-decoration: underline;">{{ $formData['purchaser_signature_name'] ?? $purchaser->full_name ?? '' }}</span>
-                </td>
-                <td class="sign-lbl">Signature</td>
-                <td class="sign-line2">
-                    @if(!empty($formData['purchaser_signature_image']))
-                    <img src="{{ $formData['purchaser_signature_image'] }}" class="sig-img" alt="Signature">
-                    @else
-                    <span class="line-wide"></span>
-                    @endif
-                </td>
-            </tr>
-            <tr>
-                <td class="sign-name">Joint Purchaser</td>
-                <td class="sign-line">
-                    <span style="text-decoration: underline;">{{ $formData['joint_signature_name'] ?? '' }}</span>
-                </td>
-                <td class="sign-lbl">Signature</td>
-                <td class="sign-line2">
-                    @if(!empty($formData['joint_signature_image']))
-                    <img src="{{ $formData['joint_signature_image'] }}" class="sig-img" alt="Signature">
-                    @else
-                    <span class="line-wide"></span>
-                    @endif
-                </td>
-            </tr>
+            {{-- Dynamic co-owner signatures --}}
+            @if(!empty($formData['owner_signatures']) && is_array($formData['owner_signatures']))
+                @foreach($formData['owner_signatures'] as $index => $ownerSig)
+                <tr>
+                    <td class="sign-name">
+                        @if($index === 0)
+                            Primary Purchaser
+                        @else
+                            Co-Purchaser {{ $index }}
+                        @endif
+                    </td>
+                    <td class="sign-line">
+                        <span style="text-decoration: underline;">{{ $ownerSig['name'] ?? '' }}</span>
+                    </td>
+                    <td class="sign-lbl">Signature</td>
+                    <td class="sign-line2">
+                        @if(!empty($ownerSig['image']))
+                        <img src="{{ $ownerSig['image'] }}" class="sig-img" alt="Signature">
+                        @else
+                        <span class="line-wide"></span>
+                        @endif
+                    </td>
+                </tr>
+                @endforeach
+            @else
+                {{-- Fallback for old format --}}
+                <tr>
+                    <td class="sign-name">Purchaser</td>
+                    <td class="sign-line">
+                        <span style="text-decoration: underline;">{{ $formData['purchaser_signature_name'] ?? $purchaser->full_name ?? '' }}</span>
+                    </td>
+                    <td class="sign-lbl">Signature</td>
+                    <td class="sign-line2">
+                        @if(!empty($formData['purchaser_signature_image']))
+                        <img src="{{ $formData['purchaser_signature_image'] }}" class="sig-img" alt="Signature">
+                        @else
+                        <span class="line-wide"></span>
+                        @endif
+                    </td>
+                </tr>
+                @if(!empty($formData['joint_signature_name']) || !empty($formData['joint_signature_image']))
+                <tr>
+                    <td class="sign-name">Joint Purchaser</td>
+                    <td class="sign-line">
+                        <span style="text-decoration: underline;">{{ $formData['joint_signature_name'] ?? '' }}</span>
+                    </td>
+                    <td class="sign-lbl">Signature</td>
+                    <td class="sign-line2">
+                        @if(!empty($formData['joint_signature_image']))
+                        <img src="{{ $formData['joint_signature_image'] }}" class="sig-img" alt="Signature">
+                        @else
+                        <span class="line-wide"></span>
+                        @endif
+                    </td>
+                </tr>
+                @endif
+            @endif
             @if(!empty($formData['poa_signature_name']))
             <tr>
                 <td class="sign-name">Purchaser POA <span class="small italic">( if applicable)</span></td>
