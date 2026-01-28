@@ -138,13 +138,23 @@ class BookingController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
+        
+        // Convert is_owner_attending to boolean if it's a string
+        if ($request->has('is_owner_attending')) {
+            $isOwnerAttending = $request->input('is_owner_attending');
+            if ($isOwnerAttending === '0' || $isOwnerAttending === 0 || $isOwnerAttending === false || $isOwnerAttending === 'false') {
+                $request->merge(['is_owner_attending' => false]);
+            } else {
+                $request->merge(['is_owner_attending' => true]);
+            }
+        }
 
         // Validate input
         $validator = Validator::make($request->all(), [
             'unit_id' => 'required|exists:units,id',
             'booked_date' => 'required|date|after:today',
             'booked_time' => 'required|string|in:09:00,10:00,11:00,12:00,13:00,14:00,15:00,16:00,17:00',
-            'is_owner_attending' => 'required|boolean',
+            'is_owner_attending' => 'nullable|boolean',
             'poa_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:10240',
             'attorney_id_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
