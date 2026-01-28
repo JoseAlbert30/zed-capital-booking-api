@@ -277,7 +277,7 @@
             <td><strong>Master Community</strong> &nbsp; {{ $property['master_community'] ?? '' }}</td>
         </tr>
         <tr>
-            <td><strong>Building</strong> &nbsp; {{ $property['building'] ?? '' }}</td>
+            <td><strong>Building</strong> &nbsp; Viera Residences</td>
         </tr>
         <tr>
             <td><strong>Unit Number</strong> &nbsp; {{ $property['unit_number'] ?? '' }}</td>
