@@ -67,6 +67,32 @@ class UserController extends Controller
         // Get all unit IDs owned by this user (including co-ownership)
         $unitIds = $user->units()->pluck('units.id');
         
+        // Add co-owner information to each unit
+        $user->units->each(function($unit) {
+            // Get the primary owner
+            $primaryOwner = \DB::table('unit_user')
+                ->where('unit_id', $unit->id)
+                ->where('is_primary', true)
+                ->first();
+            
+            if ($primaryOwner) {
+                $primaryUser = \App\Models\User::find($primaryOwner->user_id);
+                $unit->customer_name = $primaryUser ? $primaryUser->full_name : '';
+            }
+            
+            // Get all co-owners (non-primary owners)
+            $coOwnerIds = \DB::table('unit_user')
+                ->where('unit_id', $unit->id)
+                ->where('is_primary', false)
+                ->pluck('user_id');
+            
+            $coOwners = \App\Models\User::whereIn('id', $coOwnerIds)
+                ->get(['id', 'full_name as name', 'email'])
+                ->toArray();
+            
+            $unit->co_owners = $coOwners;
+        });
+        
         // Get all co-owners of the same units
         $coOwnerIds = DB::table('unit_user')
             ->whereIn('unit_id', $unitIds)
