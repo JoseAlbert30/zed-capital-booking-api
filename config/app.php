@@ -147,6 +147,8 @@ return [
 
     'admin_emails' => [
         'admin@bookingsystem.com',
+        'mohamad@zedcapitalbooking.com',
+        'mayada@zedcapitalbooking.com',
     ],
 
     /*
