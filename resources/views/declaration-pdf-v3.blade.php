@@ -568,6 +568,43 @@
             @endforeach
         @endif
     </table>
+    @elseif(isset($isBlankTemplate) && $isBlankTemplate)
+    <div class="page-break"></div>
+
+    {{-- ===================== PAGE 3 (BLANK ANNEXURE TEMPLATE) ===================== --}}
+    <div class="center" style="font-weight:500; margin-top: 8px;">
+        Annexure 1 – List of Agreed Defects for<br>Remediation
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; margin-top: 15px; border: 1px solid #333;">
+        <thead>
+            <tr style="background-color: #f3f3f3;">
+                <th style="border: 1px solid #333; padding: 8px; text-align: left; font-weight: 600; font-size: 9px; width: 5%;">#</th>
+                <th style="border: 1px solid #333; padding: 8px; text-align: left; font-weight: 600; font-size: 9px; width: 35%;">DESCRIPTION</th>
+                <th style="border: 1px solid #333; padding: 8px; text-align: left; font-weight: 600; font-size: 9px; width: 20%;">LOCATION</th>
+                <th style="border: 1px solid #333; padding: 8px; text-align: left; font-weight: 600; font-size: 9px; width: 40%;">AGREED REMEDIATION ACTION</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for($i = 1; $i <= 5; $i++)
+            <tr>
+                <td style="border: 1px solid #333; padding: 20px 8px; font-size: 9px; color: #999; text-align: center;">{{ $i }}</td>
+                <td style="border: 1px solid #333; padding: 20px 8px;">&nbsp;</td>
+                <td style="border: 1px solid #333; padding: 20px 8px;">&nbsp;</td>
+                <td style="border: 1px solid #333; padding: 20px 8px;">&nbsp;</td>
+            </tr>
+            @endfor
+        </tbody>
+    </table>
+
+    <table class="sign-table" style="margin-top: 26px;">
+        <tr>
+            <td style="width:18%; font-weight:500;">Purchaser</td>
+            <td style="width:42%;"></td>
+            <td style="width:15%; font-weight:500;" class="center">Signature</td>
+            <td style="width:25%; text-align:center;"></td>
+        </tr>
+    </table>
     @endif
 
 </body>

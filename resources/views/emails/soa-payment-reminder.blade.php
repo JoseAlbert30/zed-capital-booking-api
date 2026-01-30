@@ -84,7 +84,7 @@
             
             <p><strong>Please ensure that the Unit Number is mentioned in the remarks section for each fund transfer.</strong></p>
             
-            <p>Before making any bank transfer, always verify the bank details stated in your Sale and Purchase Agreement (SPA) to ensure accuracy and prevent errors. The Purchaser acknowledges that any transfer made to an incorrect account, due to failure to verify such details, shall be at the Purchaser's sole risk and responsibility.</p>
+            <p><strong>Before making any bank transfer, always verify the bank details stated in your Sale and Purchase Agreement (SPA) to ensure accuracy and prevent errors. The Purchaser acknowledges that any transfer made to an incorrect account, due to failure to verify such details, shall be at the Purchaser's sole risk and responsibility.</strong></p>
             
             <div class="bank-details">
                 <h3>Escrow Account Details:</h3>

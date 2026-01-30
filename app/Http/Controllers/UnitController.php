@@ -2549,6 +2549,109 @@ class UnitController extends Controller
         }
     }
 
+    public function downloadAllUtilitiesGuides(Request $request)
+    {
+        try {
+            // Generate a unique batch ID
+            $batchId = now()->format('YmdHis') . '-' . \Str::random(8);
+
+            // Dispatch the job
+            \App\Jobs\GenerateAllUtilitiesGuidesJob::dispatch($batchId);
+
+            // Initialize batch status in cache
+            \Cache::put("utilities_guides_batch_{$batchId}", [
+                'batch_id' => $batchId,
+                'status' => 'queued',
+                'success_count' => 0,
+                'failed_count' => 0,
+                'total_count' => 0,
+                'created_at' => now()->toIso8601String(),
+            ], now()->addHour());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Utilities guides generation started',
+                'batch_id' => $batchId,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to start generation',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getUtilitiesGuidesBatchProgress($batchId)
+    {
+        try {
+            $batchData = \Cache::get("utilities_guides_batch_{$batchId}");
+
+            if (!$batchData) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'batch' => $batchData,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get batch progress',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function downloadUtilitiesGuidesZip($batchId)
+    {
+        try {
+            $batchData = \Cache::get("utilities_guides_batch_{$batchId}");
+
+            if (!$batchData) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch not found'
+                ], 404);
+            }
+
+            if ($batchData['status'] !== 'completed') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch is not completed yet'
+                ], 400);
+            }
+
+            if (!isset($batchData['file_path'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File not found'
+                ], 404);
+            }
+
+            $filePath = $batchData['file_path'];
+            
+            if (!\Storage::disk('public')->exists($filePath)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File does not exist'
+                ], 404);
+            }
+
+            return \Storage::disk('public')->download($filePath);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to download file',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     /**
      * Parse currency value from CSV (removes commas, quotes, spaces)
      */

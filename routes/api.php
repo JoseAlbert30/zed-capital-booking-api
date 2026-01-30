@@ -74,6 +74,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{booking}/generate-declaration', [BookingController::class, 'generateDeclaration']);
         Route::post('/{booking}/generate-handover-checklist', [BookingController::class, 'generateHandoverChecklist']);
         Route::post('/{booking}/save-declaration-signatures', [BookingController::class, 'saveDeclarationSignatures']);
+        Route::get('/{booking}/download-blank-declaration-template', [BookingController::class, 'downloadBlankDeclarationTemplate']);
+        Route::get('/{booking}/download-blank-checklist-template', [BookingController::class, 'downloadBlankChecklistTemplate']);
         
         // Snagging defects
         Route::get('/{booking}/snagging-defects', [BookingController::class, 'getSnaggingDefects']);
@@ -93,6 +95,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/check-soa-status', [UnitController::class, 'checkSOAStatus']);
         Route::post('/bulk-generate-soa', [UnitController::class, 'bulkGenerateSOA']);
         Route::get('/download-all-soas', [UnitController::class, 'downloadAllSOAs']);
+        Route::get('/download-all-utilities-guides', [UnitController::class, 'downloadAllUtilitiesGuides']);
+        Route::get('/utilities-guides-batch/{batchId}/progress', [UnitController::class, 'getUtilitiesGuidesBatchProgress']);
+        Route::get('/utilities-guides-batch/{batchId}/download', [UnitController::class, 'downloadUtilitiesGuidesZip']);
         Route::get('/handover-batch/{batchId}/progress', [UnitController::class, 'getHandoverEmailProgress']);
         Route::get('/soa-batch/{batchId}/progress', [UnitController::class, 'getSOAGenerationProgress']);
         

@@ -1651,4 +1651,165 @@ class BookingController extends Controller
             ], 500);
         }
     }
+
+    public function downloadBlankDeclarationTemplate(Request $request, Booking $booking)
+    {
+        $user = $request->user();
+
+        if ($booking->user_id !== $user->id && !$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        try {
+            $booking->load([
+                'unit' => function ($query) {
+                    $query->with(['property', 'users']);
+                }
+            ]);
+
+            // Get co-owners
+            $coOwners = $booking->unit->users->where('id', '!=', $booking->user_id)->values();
+            
+            // Convert letterhead images to base64 using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
+            
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
+            
+            // Prepare blank data for template
+            $seller = [
+                'name' => 'Vantage Ventures Real Estate Development L.L.C.',
+                'address' => 'Office 12F-A-04, Empire Heights A, Business Bay, Dubai, UAE',
+                'phone' => '+971 58 898 0456',
+                'email' => 'vantage@zedcapital.ae'
+            ];
+            
+            $purchaser = [
+                'name' => '', // Blank
+                'address' => '',
+                'phone' => '',
+                'email' => ''
+            ];
+            
+            $property = [
+                'master_community' => 'VIERA Residences, Business Bay, Dubai',
+                'building' => '',
+                'unit_number' => ''
+            ];
+            
+            $logos = [
+                'left' => $vieraLogo,
+                'right' => $vantageLogo
+            ];
+            
+            $date = '';  // Blank date
+            
+            // Empty defects array for blank template
+            $defects = [];
+            
+            // Generate HTML content for PDF with blank fields
+            $html = view('declaration-pdf-v3', [
+                'date' => $date,
+                'seller' => $seller,
+                'purchaser' => $purchaser,
+                'property' => $property,
+                'logos' => $logos,
+                'defects' => $defects,
+                'coOwners' => $coOwners,
+                'signatureName' => '',
+                'signatureImage' => '',
+                'signaturesData' => null,
+                'isBlankTemplate' => true  // Flag to indicate this is a blank template
+            ])->render();
+
+            // Generate PDF using Dompdf
+            $pdf = \PDF::loadHTML($html)
+                ->setPaper('a4')
+                ->setOption('isHtml5ParserEnabled', true)
+                ->setOption('isRemoteEnabled', true);
+
+            // Return PDF as download
+            return $pdf->download('Declaration_Template_Blank.pdf');
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to generate blank declaration template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function downloadBlankChecklistTemplate(Request $request, Booking $booking)
+    {
+        $user = $request->user();
+
+        if ($booking->user_id !== $user->id && !$this->isAdmin($user->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        try {
+            $booking->load([
+                'unit' => function ($query) {
+                    $query->with(['property', 'users']);
+                }
+            ]);
+
+            // Get co-owners
+            $coOwners = $booking->unit->users->where('id', '!=', $booking->user_id)->values();
+            
+            // Convert letterhead images to base64 using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
+            
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
+            
+            $logos = [
+                'left' => $vieraLogo,
+                'right' => $vantageLogo
+            ];
+            
+            $date = '';  // Blank date
+            
+            // Empty form data for blank template
+            $formData = [];
+            
+            // Generate HTML content for PDF with blank fields
+            $html = view('handover-checklist-pdf', [
+                'date' => $date,
+                'booking' => $booking,
+                'purchaser' => $booking->user,
+                'unit' => $booking->unit,
+                'property' => $booking->unit->property,
+                'coOwners' => $coOwners,
+                'logos' => $logos,
+                'formData' => $formData,
+                'isBlankTemplate' => true  // Flag to indicate this is a blank template
+            ])->render();
+
+            // Generate PDF using Dompdf
+            $pdf = \PDF::loadHTML($html)
+                ->setPaper('a4')
+                ->setOption('isHtml5ParserEnabled', true)
+                ->setOption('isRemoteEnabled', true);
+
+            // Return PDF as download
+            return $pdf->download('Handover_Checklist_Template_Blank.pdf');
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to generate blank checklist template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
