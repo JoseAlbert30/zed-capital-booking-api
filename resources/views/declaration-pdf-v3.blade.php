@@ -480,6 +480,13 @@
                 </td>
             </tr>
             @endforeach
+        @elseif(isset($isBlankTemplate) && $isBlankTemplate)
+            <tr>
+                <td style="width:18%; font-weight:500;">Purchaser</td>
+                <td style="width:42%;"></td>
+                <td style="width:15%; font-weight:500;" class="center">Signature</td>
+                <td style="width:25%; text-align:center;"></td>
+            </tr>
         @endif
     </table>
 

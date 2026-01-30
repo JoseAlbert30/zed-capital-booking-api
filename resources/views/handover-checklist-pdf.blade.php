@@ -402,7 +402,7 @@
             </tr>
             <tr>
                 <td class="label" style="width: 18%;">Purchaser:</td>
-                <td class="value" style="width: 32%;"><strong>Name 1</strong> &nbsp; <span style="text-decoration: underline;">{{ $purchaser->full_name ?? 'N/A' }}</span></td>
+                <td class="value" style="width: 32%;"><strong>Name 1</strong> &nbsp; <span style="text-decoration: underline;">{{ isset($isBlankTemplate) && $isBlankTemplate ? '' : ($purchaser->full_name ?? 'N/A') }}</span></td>
                 @if(isset($coOwners) && count($coOwners) > 0 && isset($coOwners[0]))
                 <td class="label" style="width: 18%; font-weight: bold;">Name 2:</td>
                 <td class="value" style="width: 32%;"><span style="text-decoration: underline;">{{ $coOwners[0]->full_name ?? $coOwners[0]->name ?? '' }}</span></td>
@@ -572,7 +572,7 @@
                 <tr>
                     <td class="sign-name">Purchaser</td>
                     <td class="sign-line">
-                        <span style="text-decoration: underline;">{{ $formData['purchaser_signature_name'] ?? $purchaser->full_name ?? '' }}</span>
+                        <span style="text-decoration: underline;">{{ isset($isBlankTemplate) && $isBlankTemplate ? '' : ($formData['purchaser_signature_name'] ?? $purchaser->full_name ?? '') }}</span>
                     </td>
                     <td class="sign-lbl">Signature</td>
                     <td class="sign-line2">

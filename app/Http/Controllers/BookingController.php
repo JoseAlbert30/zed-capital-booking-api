@@ -1661,15 +1661,6 @@ class BookingController extends Controller
         }
 
         try {
-            $booking->load([
-                'unit' => function ($query) {
-                    $query->with(['property', 'users']);
-                }
-            ]);
-
-            // Get co-owners
-            $coOwners = $booking->unit->users->where('id', '!=', $booking->user_id)->values();
-            
             // Convert letterhead images to base64 using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
@@ -1696,6 +1687,9 @@ class BookingController extends Controller
                 'phone' => '',
                 'email' => ''
             ];
+            
+            // Empty co-owners for blank template
+            $coOwners = collect();
             
             $property = [
                 'master_community' => 'VIERA Residences, Business Bay, Dubai',
@@ -1753,15 +1747,6 @@ class BookingController extends Controller
         }
 
         try {
-            $booking->load([
-                'unit' => function ($query) {
-                    $query->with(['property', 'users']);
-                }
-            ]);
-
-            // Get co-owners
-            $coOwners = $booking->unit->users->where('id', '!=', $booking->user_id)->values();
-            
             // Convert letterhead images to base64 using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
@@ -1784,13 +1769,34 @@ class BookingController extends Controller
             // Empty form data for blank template
             $formData = [];
             
+            // Empty co-owners for blank template
+            $coOwners = collect();
+            
+            // Create blank purchaser object
+            $blankPurchaser = (object) [
+                'full_name' => '',
+                'email' => '',
+                'phone' => ''
+            ];
+            
+            // Create blank unit object
+            $blankUnit = (object) [
+                'unit' => ''
+            ];
+            
+            // Create blank property object
+            $blankProperty = (object) [
+                'project_name' => 'VIERA Residences',
+                'location' => 'Business Bay, Dubai'
+            ];
+            
             // Generate HTML content for PDF with blank fields
             $html = view('handover-checklist-pdf', [
                 'date' => $date,
-                'booking' => $booking,
-                'purchaser' => $booking->user,
-                'unit' => $booking->unit,
-                'property' => $booking->unit->property,
+                'booking' => null,
+                'purchaser' => $blankPurchaser,
+                'unit' => $blankUnit,
+                'property' => $blankProperty,
                 'coOwners' => $coOwners,
                 'logos' => $logos,
                 'formData' => $formData,
