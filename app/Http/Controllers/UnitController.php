@@ -1314,6 +1314,15 @@ class UnitController extends Controller
                         'mime' => 'application/pdf'
                     ]);
                 }
+
+                // Attach Inspection Report PDF
+                $inspectionPath = storage_path('app/public/handover-notice-attachments/viera-residences/Inspection_report.pdf');
+                if (file_exists($inspectionPath)) {
+                    $message->attach($inspectionPath, [
+                        'as' => 'Inspection_report.pdf',
+                        'mime' => 'application/pdf'
+                    ]);
+                }
             });
 
             // Mark handover email as sent
