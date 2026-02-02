@@ -125,6 +125,8 @@
             <p><strong>Your Statement of Account is attached to this email and can also be <a href="{{ $soaUrl }}" class="soa-link">viewed online here</a>.</strong></p>
             <p>Please find the escrow account details attached or <a href="{{ url('storage/handover-notice-attachments/viera-residences/Viera Residences - Escrow Acc.pdf') }}" class="soa-link">click here to download the escrow account details</a>. Email the proof of payment to <strong>finance@zedcapital.ae</strong>.</p>
 
+            <p style="color:red;"><strong>Note:</strong> If you have already settled the final payment, please disregard this section and proceed to the following steps.</p>
+
             <p><br /></p>
             <h1>2. Utilities Connections, Registrations &amp; Service Charge</h1>
             <p>To proceed with the handover, please complete the <strong>DEWA</strong> and <strong>Chilled Water / AC (Zenner)</strong> registrations as per the steps mentioned in the <strong>attached guidelines PDF</strong> or <a href="{{ url('storage/attachments/' . $unit->property->project_name . '/' . $unit->unit . '/Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf') }}" class="soa-link">click here to download the utilities registration guide</a>.</p>
@@ -133,7 +135,7 @@
             <ul>
                 <li>DEWA receipt showing the <strong>premise number</strong> for your unit</li>
                 <li>Zenner receipt for chilled water / AC connection</li>
-                <li>Signed copy of the attached <strong>Service Charge Undertaking Letter</strong></li>
+                <li>Signed copy of the attached <strong><a href="{{ url('storage/attachments/' . $unit->property->project_name . '/' . $unit->unit . '/Service_Charge_Undertaking_Letter_Unit_' . $unit->unit . '.pdf') }}" class="soa-link">Service Charge Undertaking Letter</a></strong></li>
             </ul>
             <p><br /></p>
             <h1>3. Handover Appointment</h1>
