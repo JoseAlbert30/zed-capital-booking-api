@@ -59,7 +59,12 @@ class SendHandoverEmailJob implements ShouldQueue
             
             // Get SOA URL (using the first SOA attachment)
             $firstSOA = $soaAttachments->first();
-            $soaUrl = $firstSOA ? $firstSOA->full_url : '#';
+            if ($firstSOA && $firstSOA->unit) {
+                $folderPath = 'attachments/' . $firstSOA->unit->property->project_name . '/' . $firstSOA->unit->unit;
+                $soaUrl = url('storage/' . $folderPath . '/' . $firstSOA->filename);
+            } else {
+                $soaUrl = '#';
+            }
 
             // Generate Service Charge Acknowledgement PDF
             $owners = $unit->users;
