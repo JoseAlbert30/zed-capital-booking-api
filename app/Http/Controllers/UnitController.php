@@ -1266,6 +1266,11 @@ class UnitController extends Controller
             $storagePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $utilitiesGuideFilename;
             \Storage::disk('public')->put($storagePath, $utilitiesGuidePdfContent);
 
+            // Save service charge acknowledgement PDF to storage (overwrite if exists)
+            $serviceChargeFilename = 'Service_Charge_Undertaking_Letter_Unit_' . $unit->unit . '.pdf';
+            $serviceChargeStoragePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $serviceChargeFilename;
+            \Storage::disk('public')->put($serviceChargeStoragePath, $serviceChargePdfContent);
+
             // Send email to all owners with SOA attachments
             \Mail::send('emails.handover-notice', [
                 'firstName' => $firstName,
