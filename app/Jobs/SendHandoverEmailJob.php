@@ -143,6 +143,7 @@ class SendHandoverEmailJob implements ShouldQueue
 
                 // Attach Escrow Account PDF
                 $escrowPath = storage_path('app/public/handover-notice-attachments/viera-residences/Viera Residences - Escrow Acc.pdf');
+                Log::info('Escrow path check', ['path' => $escrowPath, 'exists' => file_exists($escrowPath)]);
                 if (file_exists($escrowPath)) {
                     $message->attach($escrowPath, [
                         'as' => 'Viera Residences - Escrow Acc.pdf',
@@ -150,11 +151,12 @@ class SendHandoverEmailJob implements ShouldQueue
                     ]);
                 }
 
-                // Attach Inspection Report PDF
-                $inspectionPath = storage_path('app/public/handover-notice-attachments/viera-residences/Inspection_report.pdf');
+                // Attach RERA Inspection Report PDF
+                $inspectionPath = storage_path('app/public/handover-notice-attachments/viera-residences/RERA_inspection_report.pdf');
+                Log::info('Inspection path check', ['path' => $inspectionPath, 'exists' => file_exists($inspectionPath)]);
                 if (file_exists($inspectionPath)) {
                     $message->attach($inspectionPath, [
-                        'as' => 'Inspection_report.pdf',
+                        'as' => 'RERA_inspection_report.pdf',
                         'mime' => 'application/pdf'
                     ]);
                 }
