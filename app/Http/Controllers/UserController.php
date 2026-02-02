@@ -968,9 +968,11 @@ class UserController extends Controller
                             $dewaPremiseNumber = trim($row[2]);
                             $status = trim($row[3]);
                             $buyer1Name = trim($row[4]);
+                            $buyer1Passport = isset($row[5]) ? trim($row[5]) : '';
                             $buyer1Mobile = isset($row[6]) ? trim($row[6]) : '';
                             $buyer1Email = trim($row[7]);
                             $buyer2Name = isset($row[8]) ? trim($row[8]) : '';
+                            $buyer2Passport = isset($row[9]) ? trim($row[9]) : '';
                             $buyer2Mobile = isset($row[10]) ? trim($row[10]) : '';
                             $buyer2Email = isset($row[11]) ? trim($row[11]) : '';
                             
@@ -1029,6 +1031,7 @@ class UserController extends Controller
                                         'full_name' => $buyer1Name,
                                         'email' => $buyer1Email,
                                         'mobile_number' => $buyer1Mobile,
+                                        'passport_number' => $buyer1Passport,
                                         'password' => Hash::make($password),
                                     ]);
 
@@ -1067,6 +1070,7 @@ class UserController extends Controller
                                         'full_name' => $buyer2Name,
                                         'email' => $buyer2Email,
                                         'mobile_number' => $buyer2Mobile,
+                                        'passport_number' => $buyer2Passport,
                                         'password' => Hash::make($password),
                                     ]);
 
@@ -1152,9 +1156,11 @@ class UserController extends Controller
                             $dewaPremiseNumber = trim($row[2]);
                             $status = trim($row[3]);
                             $buyer1Name = trim($row[4]);
+                            $buyer1Passport = isset($row[5]) ? trim($row[5]) : '';
                             $buyer1Mobile = isset($row[6]) ? trim($row[6]) : '';
                             $buyer1Email = trim($row[7]);
                             $buyer2Name = isset($row[8]) ? trim($row[8]) : '';
+                            $buyer2Passport = isset($row[9]) ? trim($row[9]) : '';
                             $buyer2Mobile = isset($row[10]) ? trim($row[10]) : '';
                             $buyer2Email = isset($row[11]) ? trim($row[11]) : '';
                             
@@ -1219,6 +1225,7 @@ class UserController extends Controller
                                         'full_name' => $buyer1Name,
                                         'email' => $buyer1Email,
                                         'mobile_number' => $buyer1Mobile,
+                                        'passport_number' => $buyer1Passport,
                                         'password' => Hash::make($password),
                                     ]);
 
@@ -1257,6 +1264,7 @@ class UserController extends Controller
                                         'full_name' => $buyer2Name,
                                         'email' => $buyer2Email,
                                         'mobile_number' => $buyer2Mobile,
+                                        'passport_number' => $buyer2Passport,
                                         'password' => Hash::make($password),
                                     ]);
 
