@@ -121,8 +121,10 @@ class SendHandoverEmailJob implements ShouldQueue
                     ->subject('Handover Notice - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 
                 // Request read and delivery receipts
-                $message->getSwiftMessage()->getHeaders()->addTextHeader('Disposition-Notification-To', config('mail.from.address'));
-                $message->getSwiftMessage()->getHeaders()->addTextHeader('Return-Receipt-To', config('mail.from.address'));
+                $message->withSymfonyMessage(function ($msg) {
+                    $msg->getHeaders()->addTextHeader('Disposition-Notification-To', config('mail.from.address'));
+                    $msg->getHeaders()->addTextHeader('Return-Receipt-To', config('mail.from.address'));
+                });
                 
                 // Attach all SOA files
                 foreach ($soaAttachments as $attachment) {
