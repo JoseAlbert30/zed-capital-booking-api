@@ -1281,6 +1281,10 @@ class UnitController extends Controller
                 $message->to($recipients)
                     ->subject('Handover Notice - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 
+                // Request read and delivery receipts
+                $message->getSwiftMessage()->getHeaders()->addTextHeader('Disposition-Notification-To', config('mail.from.address'));
+                $message->getSwiftMessage()->getHeaders()->addTextHeader('Return-Receipt-To', config('mail.from.address'));
+                
                 // Attach all SOA files
                 foreach ($soaAttachments as $attachment) {
                     $filePath = storage_path('app/public/attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $attachment->filename);
