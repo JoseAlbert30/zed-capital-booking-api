@@ -1282,10 +1282,8 @@ class UnitController extends Controller
                     ->subject('Handover Notice - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 
                 // Request read and delivery receipts
-                $message->withSymfonyMessage(function ($msg) {
-                    $msg->getHeaders()->addTextHeader('Disposition-Notification-To', config('mail.from.address'));
-                    $msg->getHeaders()->addTextHeader('Return-Receipt-To', config('mail.from.address'));
-                });
+                $message->getHeaders()->addTextHeader('Disposition-Notification-To', config('mail.from.address'));
+                $message->getHeaders()->addTextHeader('Return-Receipt-To', config('mail.from.address'));
                 
                 // Attach all SOA files
                 foreach ($soaAttachments as $attachment) {
