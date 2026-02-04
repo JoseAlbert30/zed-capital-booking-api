@@ -1667,35 +1667,46 @@ class UnitController extends Controller
      */
     public function bulkGenerateSOA(Request $request)
     {
-        \Log::info("=== BULK SOA GENERATION STARTED v1.0.38 ===", [
+        \Log::info("=== BULK SOA GENERATION STARTED v1.0.39 ===", [
             'regenerate' => $request->input('regenerate', false),
             'with_pho' => $request->input('with_pho', false),
             'unit_ids' => $request->input('unit_ids'),
+            'unit_ids_count' => is_array($request->input('unit_ids')) ? count($request->input('unit_ids')) : 0,
             'user' => $request->user()->full_name ?? 'Unknown'
         ]);
         
         try {
             $regenerate = $request->input('regenerate', false);
             $withPho = $request->input('with_pho', false);
-            $specificUnitIds = $request->input('unit_ids'); // Array of unit IDs from CSV upload
+            $specificUnitIds = $request->input('unit_ids'); // Array of unit IDs from frontend
             
             if ($regenerate) {
                 // Get units for regeneration
                 if ($specificUnitIds && is_array($specificUnitIds) && count($specificUnitIds) > 0) {
-                    // Regenerate only specific units from CSV
+                    // Regenerate specific units (can be from CSV upload or from existing payment details)
                     $units = Unit::with(['users', 'attachments'])
                         ->whereIn('id', $specificUnitIds)
                         ->whereHas('users')
+                        ->whereNotNull('total_unit_price') // Only units with payment details
                         ->get();
                     
-                    \Log::info("Regenerating specific units from CSV", [
-                        'unit_count' => count($specificUnitIds)
+                    \Log::info("Regenerating specific units with existing payment details", [
+                        'requested_count' => count($specificUnitIds),
+                        'units_found' => $units->count()
                     ]);
+                    
+                    if ($units->isEmpty()) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'No units found with payment details to regenerate',
+                            'queued_count' => 0
+                        ], 400);
+                    }
                 } else {
-                    // No specific units - require confirmation via explicit flag
+                    // No specific units provided
                     return response()->json([
                         'success' => false,
-                        'message' => 'Please upload a CSV file or specify which units to regenerate',
+                        'message' => 'Please specify which units to regenerate',
                         'queued_count' => 0
                     ], 400);
                 }
