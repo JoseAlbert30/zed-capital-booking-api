@@ -16,19 +16,14 @@ class AdminUserSeeder extends Seeder
         // Create admin users
         $adminUsers = [
             [
-                'email' => 'admin@bookingsystem.com',
-                'full_name' => 'System Administrator',
-                'password' => 'admin123',
+                'email' => 'sleiman@zedcapitalbooking.com',
+                'full_name' => 'Sleiman',
+                'password' => 'sleiman123',
             ],
             [
-                'email' => 'mohamad@zedcapitalbooking.com',
-                'full_name' => 'Mohamad',
-                'password' => 'mohamad123',
-            ],
-            [
-                'email' => 'mayada@zedcapitalbooking.com',
-                'full_name' => 'Mayada',
-                'password' => 'mayada123',
+                'email' => 'devi@zedcapitalbooking.com',
+                'full_name' => 'Devi',
+                'password' => 'devi123',
             ],
         ];
 
@@ -48,9 +43,8 @@ class AdminUserSeeder extends Seeder
         }
 
         $this->command->info('\nAdmin users created successfully!');
-        $this->command->info('Email: admin@bookingsystem.com | Password: admin123');
-        $this->command->info('Email: mohamad@zedcapitalbooking.com | Password: mohamad123');
-        $this->command->info('Email: mayada@zedcapitalbooking.com | Password: mayada123');
+        $this->command->info('Email: sleiman@zedcapitalbooking.com | Password: sleiman123');
+        $this->command->info('Email: devi@zedcapitalbooking.com | Password: devi123');
         $this->command->warn('Please change the passwords after first login!');
     }
 }

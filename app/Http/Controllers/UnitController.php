@@ -1228,17 +1228,28 @@ class UnitController extends Controller
             }
 
             // Generate Service Charge Acknowledgement PDF
-            $owners = $unit->users;
-            $date = $unit->handover_email_sent_at 
-                ? \Carbon\Carbon::parse($unit->handover_email_sent_at)->format('F d, Y')
-                : now()->format('F d, Y');
+            $serviceChargeFilename = 'Service_Charge_Undertaking_Letter_Unit_' . $unit->unit . '.pdf';
+            $serviceChargeStoragePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $serviceChargeFilename;
             
-            $serviceChargePdf = \PDF::loadView('pdfs.service-charge-acknowledgement', [
-                'unit' => $unit,
-                'owners' => $owners,
-                'date' => $date
-            ]);
-            $serviceChargePdfContent = $serviceChargePdf->output();
+            // Only generate if it doesn't already exist
+            if (\Storage::disk('public')->exists($serviceChargeStoragePath)) {
+                $serviceChargePdfContent = \Storage::disk('public')->get($serviceChargeStoragePath);
+            } else {
+                $owners = $unit->users;
+                $date = $unit->handover_email_sent_at 
+                    ? \Carbon\Carbon::parse($unit->handover_email_sent_at)->format('F d, Y')
+                    : now()->format('F d, Y');
+                
+                $serviceChargePdf = \PDF::loadView('pdfs.service-charge-acknowledgement', [
+                    'unit' => $unit,
+                    'owners' => $owners,
+                    'date' => $date
+                ]);
+                $serviceChargePdfContent = $serviceChargePdf->output();
+                
+                // Save to storage
+                \Storage::disk('public')->put($serviceChargeStoragePath, $serviceChargePdfContent);
+            }
 
             // Generate Utilities Registration Guide PDF with logos using Storage facade
             $vieraLogo = '';
@@ -1265,11 +1276,6 @@ class UnitController extends Controller
             $utilitiesGuideFilename = 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf';
             $storagePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $utilitiesGuideFilename;
             \Storage::disk('public')->put($storagePath, $utilitiesGuidePdfContent);
-
-            // Save service charge acknowledgement PDF to storage (overwrite if exists)
-            $serviceChargeFilename = 'Service_Charge_Undertaking_Letter_Unit_' . $unit->unit . '.pdf';
-            $serviceChargeStoragePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $serviceChargeFilename;
-            \Storage::disk('public')->put($serviceChargeStoragePath, $serviceChargePdfContent);
 
             // Send email to all owners with SOA attachments
             \Mail::send('emails.handover-notice', [
