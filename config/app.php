@@ -149,6 +149,8 @@ return [
         'admin@bookingsystem.com',
         'mohamad@zedcapitalbooking.com',
         'mayada@zedcapitalbooking.com',
+        'sleiman@zedcapitalbooking.com',
+        'devi@zedcapitalbooking.com',
     ],
 
     /*
