@@ -2417,7 +2417,16 @@ class UnitController extends Controller
                 'owner' => $primaryOwner,
                 'documents' => $uploadedBuyerDocs
             ], function ($message) use ($unit, $uploadedBuyerDocs, $nocPath, $nocFilename) {
-                $message->to('albertarnedo03@gmail.com')
+                $message->to(['inquire@vantageventures.ae', 'mtsen@evanlimpenta.com'])
+                    ->cc([
+                        'vantage@zedcapital.ae',
+                        'docs@zedcapital.ae',
+                        'admin@zedcapital.ae',
+                        'clientsupport@zedcapital.ae',
+                        'operations@zedcapital.ae',
+                        'president@zedcapital.ae',
+                        'wbd@zedcapital.ae'
+                    ])
                     ->subject('Handover Requirements - Unit ' . $unit->unit . ' - ' . $unit->property->project_name);
                 
                 // Attach all buyer documents

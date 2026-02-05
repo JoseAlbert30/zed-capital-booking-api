@@ -288,7 +288,21 @@ class BookingController extends Controller
                 'customerMobile' => $user->mobile_number,
                 'coOwners' => $coOwners,
             ], function ($mail) use ($isPending, $unit, $request) {
-                $mail->to('albertarnedo03@gmail.com', 'Admin');
+                $mail->to([
+                        'operations@zedcapital.ae',
+                        'docs@zedcapital.ae',
+                        'admin@zedcapital.ae',
+                        'clientsupport@zedcapital.ae',
+                        'wbd@zedcapital.ae'
+                    ])
+                    ->cc([
+                        'inquire@vantageventures.ae',
+                        'mtsen@evanlimpenta.com',
+                        'adham@evanlimpenta.com',
+                        'hani@bcoam.com',
+                        'vantage@zedcapital.ae',
+                        'president@zedcapital.ae'
+                    ]);
                 $mail->subject(
                     ($isPending ? '[ACTION REQUIRED] POA Approval Needed - ' : 'New Booking - ') . 
                     'Unit ' . $unit->unit . ', ' . $unit->property->project_name
@@ -365,6 +379,19 @@ class BookingController extends Controller
                     foreach ($allOwners as $owner) {
                         $mail->to($owner->email, $owner->full_name);
                     }
+                    $mail->cc([
+                        'inquire@vantageventures.ae',
+                        'mtsen@evanlimpenta.com',
+                        'adham@evanlimpenta.com',
+                        'hani@bcoam.com',
+                        'vantage@zedcapital.ae',
+                        'docs@zedcapital.ae',
+                        'admin@zedcapital.ae',
+                        'clientsupport@zedcapital.ae',
+                        'operations@zedcapital.ae',
+                        'president@zedcapital.ae',
+                        'wbd@zedcapital.ae'
+                    ]);
                     $mail->subject('Handover Appointment Confirmation - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 });
 
@@ -498,6 +525,19 @@ class BookingController extends Controller
                 foreach ($allOwners as $owner) {
                     $mail->to($owner->email, $owner->full_name);
                 }
+                $mail->cc([
+                    'inquire@vantageventures.ae',
+                    'mtsen@evanlimpenta.com',
+                    'adham@evanlimpenta.com',
+                    'hani@bcoam.com',
+                    'vantage@zedcapital.ae',
+                    'docs@zedcapital.ae',
+                    'admin@zedcapital.ae',
+                    'clientsupport@zedcapital.ae',
+                    'operations@zedcapital.ae',
+                    'president@zedcapital.ae',
+                    'wbd@zedcapital.ae'
+                ]);
                 $mail->subject('Handover Appointment Rescheduled - Viera Residences');
             });
 
@@ -587,6 +627,19 @@ class BookingController extends Controller
                 foreach ($allOwners as $owner) {
                     $mail->to($owner->email, $owner->full_name);
                 }
+                $mail->cc([
+                    'inquire@vantageventures.ae',
+                    'mtsen@evanlimpenta.com',
+                    'adham@evanlimpenta.com',
+                    'hani@bcoam.com',
+                    'vantage@zedcapital.ae',
+                    'docs@zedcapital.ae',
+                    'admin@zedcapital.ae',
+                    'clientsupport@zedcapital.ae',
+                    'operations@zedcapital.ae',
+                    'president@zedcapital.ae',
+                    'wbd@zedcapital.ae'
+                ]);
                 $mail->subject('Handover Appointment Cancelled - Viera Residences');
             });
 
@@ -690,6 +743,19 @@ class BookingController extends Controller
                     foreach ($allOwners as $owner) {
                         $mail->to($owner->email, $owner->full_name);
                     }
+                    $mail->cc([
+                        'inquire@vantageventures.ae',
+                        'mtsen@evanlimpenta.com',
+                        'adham@evanlimpenta.com',
+                        'hani@bcoam.com',
+                        'vantage@zedcapital.ae',
+                        'docs@zedcapital.ae',
+                        'admin@zedcapital.ae',
+                        'clientsupport@zedcapital.ae',
+                        'operations@zedcapital.ae',
+                        'president@zedcapital.ae',
+                        'wbd@zedcapital.ae'
+                    ]);
                     $mail->subject('Handover Appointment Confirmed (POA Approved) - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 });
 
@@ -758,6 +824,19 @@ class BookingController extends Controller
                     foreach ($allOwners as $owner) {
                         $mail->to($owner->email, $owner->full_name);
                     }
+                    $mail->cc([
+                        'inquire@vantageventures.ae',
+                        'mtsen@evanlimpenta.com',
+                        'adham@evanlimpenta.com',
+                        'hani@bcoam.com',
+                        'vantage@zedcapital.ae',
+                        'docs@zedcapital.ae',
+                        'admin@zedcapital.ae',
+                        'clientsupport@zedcapital.ae',
+                        'operations@zedcapital.ae',
+                        'president@zedcapital.ae',
+                        'wbd@zedcapital.ae'
+                    ]);
                     $mail->subject('Handover Appointment POA Rejected - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 });
 
@@ -1007,8 +1086,25 @@ class BookingController extends Controller
                         'coOwners' => $coOwners,
                         'appointmentDate' => $appointmentDate,
                         'appointmentTime' => $booking->booked_time,
-                    ], function ($mail) use ($booking, $unit) {
-                        $mail->to('albertarnedo03@gmail.com', 'Admin');
+                    ], function ($mail) use ($booking, $unit, $allOwners) {
+                        // Send to buyer and all co-owners
+                        foreach ($allOwners as $owner) {
+                            $mail->to($owner->email, $owner->full_name);
+                        }
+                        
+                        // CC team members
+                        $mail->cc([
+                            'inquire@vantageventures.ae',
+                            'mtsen@evanlimpenta.com',
+                            'adham@evanlimpenta.com',
+                            'hani@bcoam.com',
+                            'vantage@zedcapital.ae',
+                            'docs@zedcapital.ae',
+                            'admin@zedcapital.ae',
+                            'clientsupport@zedcapital.ae',
+                            'operations@zedcapital.ae',
+                            'president@zedcapital.ae'
+                        ]);
                         $mail->subject('Handover Completed - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                         
                         // Attach declaration PDF
