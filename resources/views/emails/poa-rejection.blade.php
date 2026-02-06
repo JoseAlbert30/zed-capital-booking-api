@@ -4,7 +4,7 @@
     <meta charset="UTF-8"/>
     <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>Handover Appointment Confirmation</title>
+    <title>POA Rejected - Handover Appointment</title>
     <style>
         body {
             font-family: 'Helvetica Neue', Helvetica, Arial, Verdana, sans-serif;
@@ -121,47 +121,38 @@
         <div class="content">
             <p>Dear {{ $firstName }},</p>
 
-            <p>We are pleased to confirm your handover appointment for your unit at Viera Residences, scheduled as follows:</p>
+            <p>We regret to inform you that your Power of Attorney (POA) documents submitted for your handover appointment at Viera Residences have been rejected. As a result, your scheduled appointment has been cancelled.</p>
 
-            <p><strong>Unit Number:</strong> {{ $unitNumber ?? '[Insert Unit Number]' }}</p>
-            <p><strong>Date:</strong> {{ $appointmentDate }}</p>
-            <p><strong>Time:</strong> {{ $appointmentTime }}</p>
-            <p><strong>Location:</strong> Viera Residences, {{ $locationPin ?? 'Dubai Production City, Dubai' }}</p>
+            <p><strong>Unit Number:</strong> {{ $unitNumber }}</p>
+            <p><strong>Cancelled Date:</strong> {{ $appointmentDate }}</p>
+            <p><strong>Cancelled Time:</strong> {{ $appointmentTime }}</p>
+            <p><strong>Location:</strong> Viera Residences, Dubai Production City, Dubai</p>
 
             <hr style="border: 0; border-top: 1px solid #d6d6d6; margin: 20px 0;">
 
-            <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">Site Access & Parking Instructions</h2>
-            <ul>
-                <li>Please arrive 10 minutes prior to your scheduled appointment time.</li>
-                <li>Parking available in the building, inform security that you are attending a handover appointment.</li>
-                <li>Upon arrival, kindly proceed to the Viera Residences main entrance / reception and inform our team that you are attending a handover appointment.</li>
-                <li>A valid original Emirates ID or passport is required for site access.</li>
-            </ul>
+            <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">Rejection Reason</h2>
+            <p>{{ $rejectionReason }}</p>
 
-            <p>If a representative is attending on your behalf, please ensure they carry a valid original Power of Attorney (PoA).</p>
-            <p><br/></p>
+            <hr style="border: 0; border-top: 1px solid #d6d6d6; margin: 20px 0;">
+
+            <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">What to Do Next</h2>
+            <p>Please review the rejection reason above and take the necessary steps to address the issue. You have the following options:</p>
+            <ul>
+                <li>Contact our Handover Executive for clarification on the rejection reason.</li>
+                <li>Prepare corrected POA documents as per our requirements.</li>
+                <li>Book a new appointment once you have the updated documents.</li>
+                <li>Consider attending the handover appointment in person if possible.</li>
+            </ul>
 
             <hr style="border: 0; border-top: 1px solid #d6d6d6; margin: 20px 0;">
 
             <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">Handover Officer Executive</h2>
-            <p>Your handover will be conducted by our appointed Handover Executive:</p>
+            <p>For any questions or assistance, please contact our Handover Executive:</p>
 
             <p><strong>Name:</strong> Mohamad</p>
             <p><strong>Mobile:</strong> +971 52 273 1458</p>
 
-            <p>Please contact the Handover Executive directly in case of delay or difficulty locating the site on the day of your appointment.</p>
-
-            <hr style="border: 0; border-top: 1px solid #d6d6d6; margin: 20px 0;">
-
-            <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">Important Notes</h2>
-            <ul>
-                <li>The appointment includes unit, amenities and parking inspection and key handover.</li>
-                <li>Please bring your original Emirates ID or passport for verification.</li>
-                <li>If applicable, please bring Power of Attorney documents.</li>
-                <li>If you need to reschedule, please contact us at least 24 hours in advance.</li>
-            </ul>
-
-            <p>We look forward to welcoming you and handing over your new home at Viera Residences.</p>
+            <p>We apologize for any inconvenience this may cause and look forward to assisting you with your handover at Viera Residences.</p>
 
             <p>Yours sincerely,<br/>
             <strong>Vantage Ventures Real Estate Development L.L.C</strong><br/>

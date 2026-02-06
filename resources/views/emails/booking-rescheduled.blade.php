@@ -96,7 +96,7 @@
             <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">New Appointment Details</h2>
             <p><strong>Date:</strong> {{ $newAppointmentDate }}</p>
             <p><strong>Time:</strong> {{ $newAppointmentTime }}</p>
-            <p><strong>Location:</strong> Viera Residences, Dubai Land, Dubai</p>
+            <p><strong>Location:</strong> Viera Residences, Dubai Production City, Dubai</p>
 
             <hr style="border: 0; border-top: 1px solid #d6d6d6; margin: 20px 0;">
 

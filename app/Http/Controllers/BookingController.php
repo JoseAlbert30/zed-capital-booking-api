@@ -17,6 +17,8 @@ use App\Models\Unit;
 use App\Models\UnitRemark;
 use App\Models\EmailLog;
 use App\Models\SnaggingDefect;
+use App\Jobs\SendOwnerHandoverEmailJob;
+use App\Jobs\SendTeamHandoverEmailJob;
 
 class BookingController extends Controller
 {
@@ -119,7 +121,6 @@ class BookingController extends Controller
             ->with(['property', 'bookings' => function($query) {
                 $query->latest();
             }])
-            ->where('payment_status', 'fully_paid')
             ->where('handover_ready', true)
             ->get();
 
@@ -160,15 +161,23 @@ class BookingController extends Controller
             'is_owner_attending' => 'boolean',
             'poa_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'attorney_id_document' => 'required_if:is_owner_attending,false|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'user_id' => 'required_if:created_by_admin,true|exists:users,id',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Verify user owns this unit
+        // Verify user owns this unit (skip for admin bookings on behalf)
         $unit = \App\Models\Unit::findOrFail($request->unit_id);
-        if (!$unit->users->contains($user->id)) {
+        $isAdminBooking = $request->created_by_admin && $this->isAdmin($user->email);
+        
+        // For admin bookings, verify the provided user_id owns the unit
+        if ($isAdminBooking) {
+            if (!$request->user_id || !$unit->users->contains($request->user_id)) {
+                return response()->json(['message' => 'Invalid user_id for this unit'], 403);
+            }
+        } else if (!$unit->users->contains($user->id)) {
             return response()->json(['message' => 'You do not own this unit'], 403);
         }
 
@@ -236,9 +245,10 @@ class BookingController extends Controller
             \Log::info('POA Booking: Owner attending, status remains confirmed');
         }
 
-        // Create booking
+        // Create booking - use owner's ID if admin booking on behalf
+        $bookingUserId = $isAdminBooking && $request->user_id ? $request->user_id : $user->id;
         $booking = Booking::create([
-            'user_id' => $user->id,
+            'user_id' => $bookingUserId,
             'unit_id' => $request->unit_id,
             'booked_date' => $request->booked_date,
             'booked_time' => $request->booked_time,
@@ -251,12 +261,13 @@ class BookingController extends Controller
         // Add remark for booking creation to the unit
         $formattedDate = Carbon::parse($request->booked_date)->format('M d, Y');
         $attendanceStatus = $isOwnerAttending ? 'by owner' : 'with POA (pending approval)';
+        $bookedByInfo = $isAdminBooking ? "by admin ({$user->full_name}) on behalf of owner" : "by owner";
         $unit->remarks()->create([
             'date' => now()->format('Y-m-d'),
             'time' => now()->format('H:i:s'),
-            'event' => "Handover appointment booked for {$formattedDate} at {$request->booked_time} {$attendanceStatus} - {$user->full_name}",
+            'event' => "Handover appointment booked for {$formattedDate} at {$request->booked_time} {$attendanceStatus} {$bookedByInfo}",
             'type' => 'booking_created',
-            'admin_name' => $user->full_name,
+            'admin_name' => $isAdminBooking ? $user->full_name : 'System',
         ]);
 
         // Send admin notification email
@@ -264,9 +275,12 @@ class BookingController extends Controller
             $isPending = $bookingStatus === 'pending_poa_approval';
             $allOwners = $unit->users;
             
+            // For admin bookings, use the booking owner's info; otherwise use authenticated user
+            $bookingOwner = $isAdminBooking ? \App\Models\User::findOrFail($bookingUserId) : $user;
+            
             // Get co-owners information
-            $coOwners = $allOwners->filter(function($owner) use ($user) {
-                return $owner->id !== $user->id;
+            $coOwners = $allOwners->filter(function($owner) use ($bookingOwner) {
+                return $owner->id !== $bookingOwner->id;
             })->map(function($owner) {
                 return [
                     'name' => $owner->full_name,
@@ -283,9 +297,9 @@ class BookingController extends Controller
                 'unitNumber' => $unit->unit,
                 'appointmentDate' => $appointmentDate,
                 'appointmentTime' => $appointmentTime,
-                'customerName' => $user->full_name,
-                'customerEmail' => $user->email,
-                'customerMobile' => $user->mobile_number,
+                'customerName' => $bookingOwner->full_name,
+                'customerEmail' => $bookingOwner->email,
+                'customerMobile' => $bookingOwner->mobile_number,
                 'coOwners' => $coOwners,
             ], function ($mail) use ($isPending, $unit, $request) {
                 $mail->to([
@@ -348,6 +362,13 @@ class BookingController extends Controller
                 // Get all owners of this unit
                 $allOwners = $unit->users;
                 
+                \Log::info('Sending booking confirmation email', [
+                    'booking_id' => $booking->id,
+                    'unit_id' => $unit->id,
+                    'owners_count' => count($allOwners),
+                    'is_admin_booking' => $isAdminBooking,
+                ]);
+                
                 // Prepare first names for greeting
                 $firstNames = $allOwners->map(function($owner) {
                     return explode(' ', trim($owner->full_name))[0];
@@ -372,7 +393,7 @@ class BookingController extends Controller
                     'appointmentDate' => $appointmentDate,
                     'appointmentTime' => $appointmentTime,
                     'unitNumber' => $unit->unit,
-                    'locationPin' => $unit->property->project_name . ', Dubai Land, Dubai',
+                    'locationPin' => $unit->property->project_name . ', Dubai Production City, Dubai',
                     'unit' => $unit,
                     'property' => $unit->property,
                 ], function ($mail) use ($allOwners, $unit) {
@@ -403,10 +424,18 @@ class BookingController extends Controller
                     'type' => 'email_sent',
                     'admin_name' => 'System',
                 ]);
+                
+                \Log::info('Booking confirmation email sent successfully');
 
             } catch (\Exception $e) {
+                \Log::error('Failed to send booking confirmation email: ' . $e->getMessage());
                 // Don't fail the booking if email fails
             }
+        } else {
+            \Log::info('Booking confirmation email skipped', [
+                'booking_status' => $bookingStatus,
+                'expected' => 'confirmed',
+            ]);
         }
 
         $message = $bookingStatus === 'pending_poa_approval' 
@@ -735,7 +764,7 @@ class BookingController extends Controller
                     'appointmentDate' => $appointmentDate,
                     'appointmentTime' => $appointmentTime,
                     'unitNumber' => $unit->unit,
-                    'locationPin' => $unit->property->project_name . ', Dubai Land, Dubai',
+                    'locationPin' => $unit->property->project_name . ', Dubai Production City, Dubai',
                     'unit' => $unit,
                     'property' => $unit->property,
                     'isPOA' => true,
@@ -811,7 +840,14 @@ class BookingController extends Controller
                 $appointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
                 $appointmentTime = $booking->booked_time;
                 
-                // Send rejection email (you'll need to create this email template)
+                \Log::info('Sending POA rejection email', [
+                    'unit_id' => $unit->id,
+                    'booking_id' => $booking->id,
+                    'rejection_reason' => $rejectionReason,
+                    'recipients' => $allOwners->pluck('email')->toArray()
+                ]);
+                
+                // Send rejection email
                 Mail::send('emails.poa-rejection', [
                     'firstName' => $greeting,
                     'appointmentDate' => $appointmentDate,
@@ -840,8 +876,28 @@ class BookingController extends Controller
                     $mail->subject('Handover Appointment POA Rejected - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 });
 
+                \Log::info('POA rejection email sent successfully', [
+                    'unit_id' => $unit->id,
+                    'booking_id' => $booking->id
+                ]);
+
+                // Add remark for rejection email sent
+                $unit->remarks()->create([
+                    'date' => now()->format('Y-m-d'),
+                    'time' => now()->format('H:i:s'),
+                    'event' => "POA rejection email sent to " . count($allOwners) . " owner(s) for appointment on {$formattedDate} at {$booking->booked_time}",
+                    'type' => 'email_sent',
+                    'admin_name' => 'System',
+                ]);
+
             } catch (\Exception $e) {
-                // Don't fail if email fails
+                \Log::error('Failed to send POA rejection email', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'unit_id' => $unit->id ?? null,
+                    'booking_id' => $booking->id ?? null
+                ]);
+                // Don't fail the rejection if email fails
             }
 
             // Delete the booking
@@ -1054,110 +1110,21 @@ class BookingController extends Controller
                     'admin_user_id' => Auth::id(),
                 ]);
 
-                // Send congratulations email to all owners/co-owners
-                $this->sendCongratulationsEmail($unit);
+                // Dispatch job to send congratulations email to all owners/co-owners with attachments
+                \Log::info('Dispatching owner handover email job', [
+                    'unit_id' => $unit->id,
+                    'booking_id' => $booking->id
+                ]);
+                SendOwnerHandoverEmailJob::dispatch($unit->id, $booking->id);
                 
-                // Send handover completion notification email to admin with attachments
-                try {
-                    $allOwners = $unit->users;
-                    
-                    // Get co-owners information
-                    $coOwners = $allOwners->filter(function($owner) use ($booking) {
-                        return $owner->id !== $booking->user_id;
-                    })->map(function($owner) {
-                        return [
-                            'name' => $owner->full_name,
-                            'email' => $owner->email,
-                        ];
-                    })->values()->toArray();
-                    
-                    $completionDateTime = \Carbon\Carbon::parse($booking->handover_completed_at);
-                    $appointmentDate = \Carbon\Carbon::parse($booking->booked_date)->format('l, F j, Y');
-                    
-                    Mail::send('emails.admin-handover-completed', [
-                        'propertyName' => $unit->property->project_name,
-                        'unitNumber' => $unit->unit,
-                        'completionDate' => $completionDateTime->format('l, F j, Y'),
-                        'completionTime' => $completionDateTime->format('g:i A'),
-                        'completedBy' => Auth::user()->full_name ?? Auth::user()->email,
-                        'customerName' => $booking->user->full_name,
-                        'customerEmail' => $booking->user->email,
-                        'customerMobile' => $booking->user->mobile_number,
-                        'coOwners' => $coOwners,
-                        'appointmentDate' => $appointmentDate,
-                        'appointmentTime' => $booking->booked_time,
-                    ], function ($mail) use ($booking, $unit, $allOwners) {
-                        // Send to buyer and all co-owners
-                        foreach ($allOwners as $owner) {
-                            $mail->to($owner->email, $owner->full_name);
-                        }
-                        
-                        // CC team members
-                        $mail->cc([
-                            'inquire@vantageventures.ae',
-                            'mtsen@evanlimpenta.com',
-                            'adham@evanlimpenta.com',
-                            'hani@bcoam.com',
-                            'vantage@zedcapital.ae',
-                            'docs@zedcapital.ae',
-                            'admin@zedcapital.ae',
-                            'clientsupport@zedcapital.ae',
-                            'operations@zedcapital.ae',
-                            'president@zedcapital.ae'
-                        ]);
-                        $mail->subject('Handover Completed - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
-                        
-                        // Attach declaration PDF
-                        if ($booking->handover_declaration) {
-                            $declarationPath = Storage::disk('public')->path($booking->handover_declaration);
-                            if (file_exists($declarationPath)) {
-                                $mail->attach($declarationPath, [
-                                    'as' => 'Declaration_Unit_' . $unit->unit . '.pdf',
-                                    'mime' => 'application/pdf',
-                                ]);
-                            }
-                        }
-                        
-                        // Attach checklist PDF
-                        if ($booking->handover_checklist) {
-                            $checklistPath = Storage::disk('public')->path($booking->handover_checklist);
-                            if (file_exists($checklistPath)) {
-                                $mail->attach($checklistPath, [
-                                    'as' => 'Checklist_Unit_' . $unit->unit . '.pdf',
-                                    'mime' => 'application/pdf',
-                                ]);
-                            }
-                        }
-                        
-                        // Attach handover photo
-                        if ($booking->handover_photo) {
-                            $photoPath = Storage::disk('public')->path($booking->handover_photo);
-                            if (file_exists($photoPath)) {
-                                $extension = pathinfo($photoPath, PATHINFO_EXTENSION);
-                                $mimeType = 'image/' . ($extension === 'jpg' ? 'jpeg' : $extension);
-                                $mail->attach($photoPath, [
-                                    'as' => 'Handover_Photo_Unit_' . $unit->unit . '.' . $extension,
-                                    'mime' => $mimeType,
-                                ]);
-                            }
-                        }
-                    });
-
-                    // Add remark for admin notification email sent
-                    Remark::create([
-                        'unit_id' => $unit->id,
-                        'user_id' => $booking->user_id,
-                        'date' => now()->toDateString(),
-                        'time' => now()->toTimeString(),
-                        'event' => 'Handover completion notification email sent to admin with attachments',
-                        'type' => 'email_sent',
-                        'admin_user_id' => Auth::id(),
-                    ]);
-
-                } catch (\Exception $e) {
-                    \Log::error('Failed to send handover completion email: ' . $e->getMessage());
-                    // Don't fail the handover completion if email fails
-                }
+                // Dispatch job to send handover completion notification to team
+                // Add 5-second delay to avoid Mailtrap rate limits
+                \Log::info('Dispatching team handover email job', [
+                    'unit_id' => $unit->id,
+                    'booking_id' => $booking->id
+                ]);
+                SendTeamHandoverEmailJob::dispatch($unit->id, $booking->id, Auth::id())
+                    ->delay(now()->addSeconds(5));
             }
 
             // Add remark to user timeline
@@ -1410,50 +1377,7 @@ class BookingController extends Controller
         return in_array($email, $adminEmails);
     }
 
-    /**
-     * Send congratulations email to all owners/co-owners of a unit
-     */
-    private function sendCongratulationsEmail($unit): void
-    {
-        try {
-            // Get all owners/co-owners of this unit
-            $users = $unit->users;
-            
-            if ($users->isEmpty()) {
-                return;
-            }
 
-            $property = $unit->property;
-            $unitName = $unit->unit;
-
-            foreach ($users as $user) {
-                if (!$user->email) {
-                    continue;
-                }
-
-                Mail::send('emails.handover-congratulations', [
-                    'userName' => $user->name,
-                    'projectName' => $property->project_name,
-                    'unitName' => $unitName,
-                ], function ($message) use ($user, $property) {
-                    $message->to($user->email, $user->name)
-                            ->subject('Congratulations on Your Unit Handover! - ' . $property->project_name);
-                });
-
-                // Log email
-                EmailLog::create([
-                    'user_id' => $user->id,
-                    'email_type' => 'handover_congratulations',
-                    'recipient_email' => $user->email,
-                    'subject' => 'Congratulations on Your Unit Handover! - ' . $property->project_name,
-                    'status' => 'sent',
-                    'sent_at' => now(),
-                ]);
-            }
-        } catch (\Exception $e) {
-            // Don't throw exception - handover should still complete even if email fails
-        }
-    }
 
     /**
      * Save declaration signatures incrementally
