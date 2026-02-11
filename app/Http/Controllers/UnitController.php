@@ -2394,9 +2394,27 @@ class UnitController extends Controller
             $totalDldAndAdmin = $dldFees + $adminFee;
             $totalAmount = $unit->amount_to_pay ?? 0;
             $totalReceived = $unit->total_amount_paid ?? 0;
-            $amountPaidTowardsPurchase = min($totalReceived, $totalUnitPrice);
-            $excessPayment = max(0, $totalReceived - $totalAmount);
-            $percentageCompleted = $totalUnitPrice > 0 ? ($totalReceived / $totalUnitPrice * 100) : 0;
+            $hasPHO = $unit->has_pho ?? false;
+            
+            // For PHO units, calculate proper values based on purchase price and DLD+admin
+            if ($hasPHO) {
+                // If total_amount is 0 or not set, calculate it
+                if ($totalAmount == 0) {
+                    $totalAmount = $totalUnitPrice + $totalDldAndAdmin;
+                }
+                // Set total received to match total amount (fully paid)
+                $totalReceived = $totalAmount;
+                $amountPaidTowardsPurchase = $totalUnitPrice;
+                $amountPaidTowardsDldAdmin = $totalDldAndAdmin;
+                $excessPayment = 0;
+                $percentageCompleted = 100;
+            } else {
+                $amountPaidTowardsPurchase = min($totalReceived, $totalUnitPrice);
+                // Calculate amount paid towards DLD + Admin (after purchase price is covered)
+                $amountPaidTowardsDldAdmin = max(0, min($totalReceived - $totalUnitPrice, $totalDldAndAdmin));
+                $excessPayment = max(0, $totalReceived - $totalAmount);
+                $percentageCompleted = $totalUnitPrice > 0 ? ($amountPaidTowardsPurchase / $totalUnitPrice * 100) : 0;
+            }
 
             // Generate PDF
             $pdf = \PDF::loadView('pdfs.clearance', [
@@ -2409,7 +2427,9 @@ class UnitController extends Controller
                 'total_amount' => $totalAmount,
                 'total_received' => $totalReceived,
                 'amount_paid_towards_purchase' => $amountPaidTowardsPurchase,
+                'amount_paid_towards_dld_admin' => $amountPaidTowardsDldAdmin,
                 'excess_payment' => $excessPayment,
+                'percentage_completed' => $percentageCompleted,
                 'percentage_completed' => $percentageCompleted,
                 'requirement1' => $validated['requirement1'] ? 'YES' : 'NO',
                 'requirement2' => $validated['requirement2'] ? 'YES' : 'NO',
