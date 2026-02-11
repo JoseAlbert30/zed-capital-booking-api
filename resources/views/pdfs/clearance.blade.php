@@ -295,7 +295,11 @@
         </tr>
         <tr>
             <td class="label">AMOUNT PAID TOWARDS PURCHASE PRICE</td>
-            <td class="amount">AED {{ number_format($total_received - (($unit->dld_fees ?? 0) + ($unit->admin_fee ?? 0)), 2, '.', ',') }}</td>
+            <td class="amount">AED {{ number_format($amount_paid_towards_purchase, 2, '.', ',') }}</td>
+        </tr>
+        <tr>
+            <td class="label">AMOUNT PAID TOWARDS 4% DLD + ADMIN FEE</td>
+            <td class="amount">AED {{ number_format($amount_paid_towards_dld_admin, 2, '.', ',') }}</td>
         </tr>
         <tr>
             <td class="label">EXCESS PAYMENT RECEIVED</td>
@@ -346,6 +350,10 @@
             <tr>
                 <td class="requirement-label">6. TITLE DEED FEE PAID</td>
                 <td class="requirement-value {{ strtolower($requirement6) }}">{{ $requirement6 }}</td>
+            </tr>
+            <tr>
+                <td class="requirement-label">7. PDC FOR POST HANDOVER PAYMENT PLAN (IF APPLICABLE)</td>
+                <td class="requirement-value {{ strtolower($requirement7) }}">{{ $requirement7 }}</td>
             </tr>
         </tbody>
     </table>

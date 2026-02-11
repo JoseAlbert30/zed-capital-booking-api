@@ -5,6 +5,7 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UnitController;
 use App\Http\Controllers\EmailController;
+use App\Http\Controllers\SalesOfferController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -135,6 +136,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->group(function () {
         Route::get('/remarks', [UnitController::class, 'getAllRemarks']);
         Route::get('/remarks/export', [UnitController::class, 'exportRemarks']);
+    });
+
+    Route::prefix('sales-offers')->group(function () {
+        Route::get('/', [SalesOfferController::class, 'index']);
+        Route::post('/upload-csv', [SalesOfferController::class, 'uploadCsv']);
+        Route::post('/{offer}/generate-offer', [SalesOfferController::class, 'generateOffer']);
+        Route::post('/bulk-generate', [SalesOfferController::class, 'bulkGenerate']);
+        Route::get('/bulk-download/{batchId}', [SalesOfferController::class, 'downloadBulk']);
+        Route::get('/bulk-status/{batchId}', [SalesOfferController::class, 'checkBulkStatus']);
     });
 
     Route::get('/properties', function () {

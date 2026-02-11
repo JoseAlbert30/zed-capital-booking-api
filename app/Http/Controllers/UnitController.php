@@ -2357,6 +2357,7 @@ class UnitController extends Controller
                 'requirement5' => 'required|string|in:yes,nil',
                 'requirement5_amount' => 'nullable|numeric|min:0',
                 'requirement6' => 'required|boolean',
+                'requirement7' => 'required|string|in:yes,nil',
                 'remarks' => 'nullable|string',
             ]);
 
@@ -2393,9 +2394,22 @@ class UnitController extends Controller
             $totalDldAndAdmin = $dldFees + $adminFee;
             $totalAmount = $unit->amount_to_pay ?? 0;
             $totalReceived = $unit->total_amount_paid ?? 0;
-            $amountPaidTowardsPurchase = min($totalReceived, $totalUnitPrice);
-            $excessPayment = max(0, $totalReceived - $totalAmount);
-            $percentageCompleted = $totalUnitPrice > 0 ? ($totalReceived / $totalUnitPrice * 100) : 0;
+            $hasPHO = $unit->has_pho ?? false;
+            
+            // For PHO units, show all amounts as fully paid
+            if ($hasPHO) {
+                $totalReceived = $totalAmount;
+                $amountPaidTowardsPurchase = $totalUnitPrice;
+                $amountPaidTowardsDldAdmin = $totalDldAndAdmin;
+                $excessPayment = 0;
+                $percentageCompleted = 100;
+            } else {
+                $amountPaidTowardsPurchase = min($totalReceived, $totalUnitPrice);
+                // Calculate amount paid towards DLD + Admin (after purchase price is covered)
+                $amountPaidTowardsDldAdmin = max(0, min($totalReceived - $totalUnitPrice, $totalDldAndAdmin));
+                $excessPayment = max(0, $totalReceived - $totalAmount);
+                $percentageCompleted = $totalUnitPrice > 0 ? ($amountPaidTowardsPurchase / $totalUnitPrice * 100) : 0;
+            }
 
             // Generate PDF
             $pdf = \PDF::loadView('pdfs.clearance', [
@@ -2408,6 +2422,7 @@ class UnitController extends Controller
                 'total_amount' => $totalAmount,
                 'total_received' => $totalReceived,
                 'amount_paid_towards_purchase' => $amountPaidTowardsPurchase,
+                'amount_paid_towards_dld_admin' => $amountPaidTowardsDldAdmin,
                 'excess_payment' => $excessPayment,
                 'percentage_completed' => $percentageCompleted,
                 'requirement1' => $validated['requirement1'] ? 'YES' : 'NO',
@@ -2418,6 +2433,7 @@ class UnitController extends Controller
                 'requirement5' => strtoupper($validated['requirement5']),
                 'requirement5_amount' => $validated['requirement5_amount'] ?? null,
                 'requirement6' => $validated['requirement6'] ? 'YES' : 'NO',
+                'requirement7' => strtoupper($validated['requirement7']),
                 'remarks' => $validated['remarks'] ?? '',
                 'logos' => $logos,
             ]);
