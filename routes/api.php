@@ -102,6 +102,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/soa-batch/{batchId}/progress', [UnitController::class, 'getSOAGenerationProgress']);
         
         // Unit-centric workflow endpoints (specific routes before generic {unit})
+        Route::post('/{unit}/payment-details/update-only', [UnitController::class, 'updatePaymentDetailsOnly']);
         Route::post('/{unit}/payment-details', [UnitController::class, 'updateSingleUnitPaymentDetails']);
         Route::put('/{unit}/payment-status', [UnitController::class, 'updatePaymentStatus']);
         Route::post('/{unit}/remarks', [UnitController::class, 'addRemark']);
@@ -118,6 +119,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{unit}/noc-handover', [UnitController::class, 'generateNOC']);
         Route::get('/{unit}/developer-requirements-preview', [UnitController::class, 'previewDeveloperRequirements']);
         Route::post('/{unit}/send-to-developer', [UnitController::class, 'sendRequirementsToDeveloper']);
+        Route::post('/{unit}/generate-clearance', [UnitController::class, 'generateClearance']);
         
         Route::get('/{unit}', [UnitController::class, 'show']);
         Route::put('/{unit}', [UnitController::class, 'update']);
@@ -128,6 +130,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/send-soa', [EmailController::class, 'sendSOAEmail']);
         Route::get('/logs', [EmailController::class, 'getAllEmailLogs']);
         Route::get('/logs/{userId}', [EmailController::class, 'getUserEmailLogs']);
+    });
+
+    Route::prefix('admin')->group(function () {
+        Route::get('/remarks', [UnitController::class, 'getAllRemarks']);
+        Route::get('/remarks/export', [UnitController::class, 'exportRemarks']);
     });
 
     Route::get('/properties', function () {

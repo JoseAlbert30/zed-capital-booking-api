@@ -32,7 +32,7 @@ class BookingController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         if (!$this->isAdmin($user->email)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
@@ -45,9 +45,9 @@ class BookingController extends Controller
         // Search filter (by user name or email)
         if ($request->has('search') && $request->search) {
             $searchTerm = '%' . $request->search . '%';
-            $query->whereHas('user', function($q) use ($searchTerm) {
+            $query->whereHas('user', function ($q) use ($searchTerm) {
                 $q->where('full_name', 'like', $searchTerm)
-                  ->orWhere('email', 'like', $searchTerm);
+                    ->orWhere('email', 'like', $searchTerm);
             });
         }
 
@@ -63,7 +63,7 @@ class BookingController extends Controller
 
         // Project filter (through user's units)
         if ($request->has('project') && $request->project) {
-            $query->whereHas('user.units.property', function($q) use ($request) {
+            $query->whereHas('user.units.property', function ($q) use ($request) {
                 $q->where('project_name', $request->project);
             });
         }
@@ -71,22 +71,22 @@ class BookingController extends Controller
         $bookings = $query->orderBy('booked_date', 'asc')->get();
 
         // Add co-owner information to each booking
-        $bookings = $bookings->map(function($booking) {
+        $bookings = $bookings->map(function ($booking) {
             $user = $booking->user;
             if ($user && $user->units) {
                 $unitIds = $user->units->pluck('id');
-                
+
                 // Get all co-owners
                 $coOwnerIds = \DB::table('unit_user')
                     ->whereIn('unit_id', $unitIds)
                     ->pluck('user_id')
                     ->unique();
-                
+
                 $coOwners = \App\Models\User::whereIn('id', $coOwnerIds)
                     ->where('id', '!=', $user->id)
                     ->select('id', 'full_name', 'email')
                     ->get();
-                
+
                 $booking->co_owners = $coOwners;
             } else {
                 $booking->co_owners = [];
@@ -100,7 +100,7 @@ class BookingController extends Controller
     public function userBookings(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         $bookings = Booking::where('user_id', $user->id)
             ->with('unit.property')
             ->orderBy('booked_date', 'desc')
@@ -115,17 +115,17 @@ class BookingController extends Controller
     public function eligibleUnits(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         // Get all units where user is an owner
         $units = $user->units()
-            ->with(['property', 'bookings' => function($query) {
+            ->with(['property', 'bookings' => function ($query) {
                 $query->latest();
             }])
             ->where('handover_ready', true)
             ->get();
 
         // Add booking status for each unit
-        $units = $units->map(function($unit) {
+        $units = $units->map(function ($unit) {
             $existingBooking = $unit->bookings->first();
             $unit->has_booking = $existingBooking ? true : false;
             $unit->booking = $existingBooking;
@@ -139,7 +139,7 @@ class BookingController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         // Convert is_owner_attending to boolean if it's a string, or set default
         if ($request->has('is_owner_attending')) {
             $isOwnerAttending = $request->input('is_owner_attending');
@@ -171,7 +171,7 @@ class BookingController extends Controller
         // Verify user owns this unit (skip for admin bookings on behalf)
         $unit = \App\Models\Unit::findOrFail($request->unit_id);
         $isAdminBooking = $request->created_by_admin && $this->isAdmin($user->email);
-        
+
         // For admin bookings, verify the provided user_id owns the unit
         if ($isAdminBooking) {
             if (!$request->user_id || !$unit->users->contains($request->user_id)) {
@@ -193,7 +193,7 @@ class BookingController extends Controller
 
         if ($existingBooking) {
             $bookedBy = $existingBooking->user_id === $user->id ? 'You' : $existingBooking->user->full_name;
-            
+
             return response()->json([
                 'message' => "A booking already exists for this unit. Booked by: {$bookedBy}",
                 'booked_by' => $existingBooking->user->full_name,
@@ -274,23 +274,23 @@ class BookingController extends Controller
         try {
             $isPending = $bookingStatus === 'pending_poa_approval';
             $allOwners = $unit->users;
-            
+
             // For admin bookings, use the booking owner's info; otherwise use authenticated user
             $bookingOwner = $isAdminBooking ? \App\Models\User::findOrFail($bookingUserId) : $user;
-            
+
             // Get co-owners information
-            $coOwners = $allOwners->filter(function($owner) use ($bookingOwner) {
+            $coOwners = $allOwners->filter(function ($owner) use ($bookingOwner) {
                 return $owner->id !== $bookingOwner->id;
-            })->map(function($owner) {
+            })->map(function ($owner) {
                 return [
                     'name' => $owner->full_name,
                     'email' => $owner->email,
                 ];
             })->values()->toArray();
-            
+
             $appointmentDate = Carbon::parse($request->booked_date)->format('l, F j, Y');
             $appointmentTime = $request->booked_time;
-            
+
             Mail::send('emails.admin-booking-notification', [
                 'isPending' => $isPending,
                 'propertyName' => $unit->property->project_name,
@@ -303,25 +303,28 @@ class BookingController extends Controller
                 'coOwners' => $coOwners,
             ], function ($mail) use ($isPending, $unit, $request) {
                 $mail->to([
-                        'operations@zedcapital.ae',
-                        'docs@zedcapital.ae',
-                        'admin@zedcapital.ae',
-                        'clientsupport@zedcapital.ae',
-                        'wbd@zedcapital.ae'
-                    ])
+                    'operations@zedcapital.ae',
+                    'docs@zedcapital.ae',
+                    'admin@zedcapital.ae',
+                    'clientsupport@zedcapital.ae',
+                    'wbd@zedcapital.ae'
+                ])
                     ->cc([
                         'inquire@vantageventures.ae',
                         'mtsen@evanlimpenta.com',
                         'adham@evanlimpenta.com',
                         'hani@bcoam.com',
+                        'glen@evanlimpenta.com',
+                        'badawi@evanlimpenta.com',
+                        'info@bcoam.com',
                         'vantage@zedcapital.ae',
                         'president@zedcapital.ae'
                     ]);
                 $mail->subject(
-                    ($isPending ? '[ACTION REQUIRED] POA Approval Needed - ' : 'New Booking - ') . 
-                    'Unit ' . $unit->unit . ', ' . $unit->property->project_name
+                    ($isPending ? '[ACTION REQUIRED] POA Approval Needed - ' : 'New Booking - ') .
+                        'Unit ' . $unit->unit . ', ' . $unit->property->project_name
                 );
-                
+
                 // Attach POA documents if they exist
                 if ($isPending) {
                     if ($request->hasFile('poa_document')) {
@@ -331,7 +334,7 @@ class BookingController extends Controller
                             'mime' => $poaFile->getMimeType(),
                         ]);
                     }
-                    
+
                     if ($request->hasFile('attorney_id_document')) {
                         $idFile = $request->file('attorney_id_document');
                         $mail->attach($idFile->getRealPath(), [
@@ -350,7 +353,6 @@ class BookingController extends Controller
                 'type' => 'email_sent',
                 'admin_name' => 'System',
             ]);
-
         } catch (\Exception $e) {
             \Log::error('Failed to send admin notification email: ' . $e->getMessage());
             // Don't fail the booking if email fails
@@ -361,19 +363,19 @@ class BookingController extends Controller
             try {
                 // Get all owners of this unit
                 $allOwners = $unit->users;
-                
+
                 \Log::info('Sending booking confirmation email', [
                     'booking_id' => $booking->id,
                     'unit_id' => $unit->id,
                     'owners_count' => count($allOwners),
                     'is_admin_booking' => $isAdminBooking,
                 ]);
-                
+
                 // Prepare first names for greeting
-                $firstNames = $allOwners->map(function($owner) {
+                $firstNames = $allOwners->map(function ($owner) {
                     return explode(' ', trim($owner->full_name))[0];
                 })->toArray();
-                
+
                 // Format the greeting
                 if (count($firstNames) == 1) {
                     $greeting = $firstNames[0];
@@ -383,10 +385,10 @@ class BookingController extends Controller
                     $lastNames = array_pop($firstNames);
                     $greeting = implode(', ', $firstNames) . ', & ' . $lastNames;
                 }
-                
+
                 $appointmentDate = Carbon::parse($request->booked_date)->format('l, F j, Y');
                 $appointmentTime = $request->booked_time;
-                
+
                 // Send email to all owners
                 Mail::send('emails.booking-confirmation', [
                     'firstName' => $greeting,
@@ -405,6 +407,9 @@ class BookingController extends Controller
                         'mtsen@evanlimpenta.com',
                         'adham@evanlimpenta.com',
                         'hani@bcoam.com',
+                        'glen@evanlimpenta.com',
+                        'badawi@evanlimpenta.com',
+                        'info@bcoam.com',
                         'vantage@zedcapital.ae',
                         'docs@zedcapital.ae',
                         'admin@zedcapital.ae',
@@ -424,9 +429,8 @@ class BookingController extends Controller
                     'type' => 'email_sent',
                     'admin_name' => 'System',
                 ]);
-                
-                \Log::info('Booking confirmation email sent successfully');
 
+                \Log::info('Booking confirmation email sent successfully');
             } catch (\Exception $e) {
                 \Log::error('Failed to send booking confirmation email: ' . $e->getMessage());
                 // Don't fail the booking if email fails
@@ -438,7 +442,7 @@ class BookingController extends Controller
             ]);
         }
 
-        $message = $bookingStatus === 'pending_poa_approval' 
+        $message = $bookingStatus === 'pending_poa_approval'
             ? 'Booking submitted successfully. Your POA documents are under review. You will receive a confirmation email once approved.'
             : 'Booking created successfully';
 
@@ -505,7 +509,7 @@ class BookingController extends Controller
         // Add remark for booking rescheduling
         $oldFormattedDate = Carbon::parse($oldDate)->format('M d, Y');
         $newFormattedDate = Carbon::parse($booking->booked_date)->format('M d, Y');
-        
+
         $bookingUser->remarks()->create([
             'event' => "Handover appointment rescheduled from {$oldFormattedDate} at {$oldTime} to {$newFormattedDate} at {$booking->booked_time} (Admin)",
             'type' => 'booking_rescheduled',
@@ -521,14 +525,14 @@ class BookingController extends Controller
                 ->whereIn('unit_id', $unitIds)
                 ->pluck('user_id')
                 ->unique();
-            
+
             $allOwners = \App\Models\User::whereIn('id', $coOwnerIds)->get();
-            
+
             // Prepare first names for greeting
-            $firstNames = $allOwners->map(function($owner) {
+            $firstNames = $allOwners->map(function ($owner) {
                 return explode(' ', trim($owner->full_name))[0];
             })->toArray();
-            
+
             // Format the greeting
             if (count($firstNames) == 1) {
                 $greeting = $firstNames[0];
@@ -538,12 +542,12 @@ class BookingController extends Controller
                 $lastNames = array_pop($firstNames);
                 $greeting = implode(', ', $firstNames) . ', & ' . $lastNames;
             }
-            
+
             $oldAppointmentDate = Carbon::parse($oldDate)->format('l, F j, Y');
             $oldAppointmentTime = $oldTime;
             $newAppointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
             $newAppointmentTime = $booking->booked_time;
-            
+
             Mail::send('emails.booking-rescheduled', [
                 'firstName' => $greeting,
                 'oldAppointmentDate' => $oldAppointmentDate,
@@ -559,6 +563,9 @@ class BookingController extends Controller
                     'mtsen@evanlimpenta.com',
                     'adham@evanlimpenta.com',
                     'hani@bcoam.com',
+                    'glen@evanlimpenta.com',
+                    'badawi@evanlimpenta.com',
+                    'info@bcoam.com',
                     'vantage@zedcapital.ae',
                     'docs@zedcapital.ae',
                     'admin@zedcapital.ae',
@@ -579,7 +586,6 @@ class BookingController extends Controller
                     'time' => $booking->booked_time,
                 ]);
             }
-
         } catch (\Exception $e) {
         }
 
@@ -605,19 +611,19 @@ class BookingController extends Controller
         // Get the booking owner's unit IDs
         $bookingUser = $booking->user;
         $unitIds = $bookingUser->units()->pluck('units.id');
-        
+
         // Get all co-owners of the same units
         $coOwnerIds = \DB::table('unit_user')
             ->whereIn('unit_id', $unitIds)
             ->pluck('user_id')
             ->unique();
-        
+
         $allOwners = \App\Models\User::whereIn('id', $coOwnerIds)->get();
 
         // Add remarks for cancellation
         $formattedDate = Carbon::parse($bookedDate)->format('M d, Y');
         $cancellationType = $isAdminCancellation ? '(Admin)' : '(Self)';
-        
+
         foreach ($allOwners as $owner) {
             $owner->remarks()->create([
                 'event' => "Handover appointment cancelled for {$formattedDate} at {$bookedTime} {$cancellationType}",
@@ -631,10 +637,10 @@ class BookingController extends Controller
         // Send cancellation email to all co-owners
         try {
             // Prepare first names for greeting
-            $firstNames = $allOwners->map(function($owner) {
+            $firstNames = $allOwners->map(function ($owner) {
                 return explode(' ', trim($owner->full_name))[0];
             })->toArray();
-            
+
             // Format the greeting
             if (count($firstNames) == 1) {
                 $greeting = $firstNames[0];
@@ -644,10 +650,10 @@ class BookingController extends Controller
                 $lastNames = array_pop($firstNames);
                 $greeting = implode(', ', $firstNames) . ', & ' . $lastNames;
             }
-            
+
             $appointmentDate = Carbon::parse($bookedDate)->format('l, F j, Y');
             $appointmentTime = $bookedTime;
-            
+
             Mail::send('emails.booking-cancelled', [
                 'firstName' => $greeting,
                 'appointmentDate' => $appointmentDate,
@@ -661,6 +667,9 @@ class BookingController extends Controller
                     'mtsen@evanlimpenta.com',
                     'adham@evanlimpenta.com',
                     'hani@bcoam.com',
+                    'glen@evanlimpenta.com',
+                    'badawi@evanlimpenta.com',
+                    'info@bcoam.com',
                     'vantage@zedcapital.ae',
                     'docs@zedcapital.ae',
                     'admin@zedcapital.ae',
@@ -681,10 +690,9 @@ class BookingController extends Controller
                     'time' => $bookedTime,
                 ]);
             }
-
         } catch (\Exception $e) {
         }
-        
+
         // Delete all bookings for co-owners with the same date and time
         Booking::whereIn('user_id', $coOwnerIds)
             ->where('booked_date', $bookedDate)
@@ -739,12 +747,12 @@ class BookingController extends Controller
             // Send confirmation email to all owners
             try {
                 $allOwners = $unit->users;
-                
+
                 // Prepare first names for greeting
-                $firstNames = $allOwners->map(function($owner) {
+                $firstNames = $allOwners->map(function ($owner) {
                     return explode(' ', trim($owner->full_name))[0];
                 })->toArray();
-                
+
                 // Format the greeting
                 if (count($firstNames) == 1) {
                     $greeting = $firstNames[0];
@@ -754,10 +762,10 @@ class BookingController extends Controller
                     $lastNames = array_pop($firstNames);
                     $greeting = implode(', ', $firstNames) . ', & ' . $lastNames;
                 }
-                
+
                 $appointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
                 $appointmentTime = $booking->booked_time;
-                
+
                 // Send confirmation email
                 Mail::send('emails.booking-confirmation', [
                     'firstName' => $greeting,
@@ -777,6 +785,9 @@ class BookingController extends Controller
                         'mtsen@evanlimpenta.com',
                         'adham@evanlimpenta.com',
                         'hani@bcoam.com',
+                        'glen@evanlimpenta.com',
+                        'badawi@evanlimpenta.com',
+                        'info@bcoam.com',
                         'vantage@zedcapital.ae',
                         'docs@zedcapital.ae',
                         'admin@zedcapital.ae',
@@ -796,7 +807,6 @@ class BookingController extends Controller
                     'type' => 'email_sent',
                     'admin_name' => 'System',
                 ]);
-
             } catch (\Exception $e) {
                 // Don't fail if email fails
             }
@@ -805,11 +815,10 @@ class BookingController extends Controller
                 'message' => 'POA booking approved and confirmation email sent',
                 'booking' => $booking,
             ]);
-
         } else {
             // Reject the booking
             $rejectionReason = $request->input('rejection_reason');
-            
+
             // Add remark for POA rejection
             $formattedDate = Carbon::parse($booking->booked_date)->format('M d, Y');
             $unit->remarks()->create([
@@ -823,11 +832,11 @@ class BookingController extends Controller
             // Send rejection email to all owners
             try {
                 $allOwners = $unit->users;
-                
-                $firstNames = $allOwners->map(function($owner) {
+
+                $firstNames = $allOwners->map(function ($owner) {
                     return explode(' ', trim($owner->full_name))[0];
                 })->toArray();
-                
+
                 if (count($firstNames) == 1) {
                     $greeting = $firstNames[0];
                 } elseif (count($firstNames) == 2) {
@@ -836,17 +845,17 @@ class BookingController extends Controller
                     $lastNames = array_pop($firstNames);
                     $greeting = implode(', ', $firstNames) . ', & ' . $lastNames;
                 }
-                
+
                 $appointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
                 $appointmentTime = $booking->booked_time;
-                
+
                 \Log::info('Sending POA rejection email', [
                     'unit_id' => $unit->id,
                     'booking_id' => $booking->id,
                     'rejection_reason' => $rejectionReason,
                     'recipients' => $allOwners->pluck('email')->toArray()
                 ]);
-                
+
                 // Send rejection email
                 Mail::send('emails.poa-rejection', [
                     'firstName' => $greeting,
@@ -865,6 +874,9 @@ class BookingController extends Controller
                         'mtsen@evanlimpenta.com',
                         'adham@evanlimpenta.com',
                         'hani@bcoam.com',
+                        'glen@evanlimpenta.com',
+                        'badawi@evanlimpenta.com',
+                        'info@bcoam.com',
                         'vantage@zedcapital.ae',
                         'docs@zedcapital.ae',
                         'admin@zedcapital.ae',
@@ -889,7 +901,6 @@ class BookingController extends Controller
                     'type' => 'email_sent',
                     'admin_name' => 'System',
                 ]);
-
             } catch (\Exception $e) {
                 \Log::error('Failed to send POA rejection email', [
                     'error' => $e->getMessage(),
@@ -948,7 +959,7 @@ class BookingController extends Controller
             $unit = $booking->unit;
             $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
             $fileType = $request->input('file_type');
-            
+
             // Delete existing file of this type if it exists
             $existingAttachment = $unit->attachments()->where('type', $fileType)->first();
             if ($existingAttachment) {
@@ -961,7 +972,7 @@ class BookingController extends Controller
             $extension = $file->extension();
             $filename = $fileType . '_' . time() . '.' . $extension;
             $path = $file->storeAs($folderPath, $filename, 'public');
-            
+
             // Create attachment record
             $attachment = $unit->attachments()->create([
                 'filename' => $filename,
@@ -980,7 +991,7 @@ class BookingController extends Controller
                 'handover_photo' => 'Handover Photo',
                 'client_signature' => 'Client Signature',
             ];
-            
+
             Remark::create([
                 'unit_id' => $unit->id,
                 'user_id' => $booking->user_id,
@@ -1024,7 +1035,7 @@ class BookingController extends Controller
             $unit = $booking->unit;
             $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
             $fileType = $request->input('file_type');
-            
+
             // Find and delete attachment
             $attachment = $unit->attachments()->where('type', $fileType)->first();
             if ($attachment) {
@@ -1044,7 +1055,7 @@ class BookingController extends Controller
                 'handover_photo' => 'Handover Photo',
                 'client_signature' => 'Client Signature',
             ];
-            
+
             Remark::create([
                 'unit_id' => $unit->id,
                 'user_id' => $booking->user_id,
@@ -1075,8 +1086,10 @@ class BookingController extends Controller
         }
 
         // Validate that all required files are uploaded
-        if (!$booking->handover_checklist || !$booking->handover_declaration || 
-            !$booking->handover_photo) {
+        if (
+            !$booking->handover_checklist || !$booking->handover_declaration ||
+            !$booking->handover_photo
+        ) {
             return response()->json([
                 'message' => 'All handover files must be uploaded before completing'
             ], 422);
@@ -1116,7 +1129,7 @@ class BookingController extends Controller
                     'booking_id' => $booking->id
                 ]);
                 SendOwnerHandoverEmailJob::dispatch($unit->id, $booking->id);
-                
+
                 // Dispatch job to send handover completion notification to team
                 // Add 5-second delay to avoid Mailtrap rate limits
                 \Log::info('Dispatching team handover email job', [
@@ -1167,11 +1180,11 @@ class BookingController extends Controller
         }
 
         return response()->json([
-            'handover_checklist_template' => $property->handover_checklist_template 
-                ? url('api/storage/' . $property->handover_checklist_template) 
+            'handover_checklist_template' => $property->handover_checklist_template
+                ? url('api/storage/' . $property->handover_checklist_template)
                 : null,
-            'declaration_template' => $property->declaration_template 
-                ? url('api/storage/' . $property->declaration_template) 
+            'declaration_template' => $property->declaration_template
+                ? url('api/storage/' . $property->declaration_template)
                 : null,
         ]);
     }
@@ -1217,29 +1230,29 @@ class BookingController extends Controller
         try {
             $unit = $booking->unit;
             $path = null;
-            
+
             // Save image if provided
             if ($request->hasFile('image')) {
                 // Sanitize folder path to remove special characters
                 $projectName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $unit->property->project_name);
                 $unitName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $unit->unit);
                 $folderPath = 'snagging/' . $projectName . '/' . $unitName;
-                
+
                 $file = $request->file('image');
                 $extension = $file->getClientOriginalExtension();
                 $filename = 'defect_' . time() . '_' . uniqid() . '.' . $extension;
-                
+
                 // Use Storage::put which automatically creates directories
                 $fullPath = $folderPath . '/' . $filename;
                 $stored = Storage::disk('public')->put($fullPath, file_get_contents($file->getRealPath()));
-                
+
                 if (!$stored) {
                     throw new \Exception('Failed to store image file');
                 }
-                
+
                 $path = $fullPath;
             }
-            
+
             // Create defect record
             $defect = $booking->snaggingDefects()->create([
                 'image_path' => $path,
@@ -1343,7 +1356,7 @@ class BookingController extends Controller
             // Get defect info before deletion
             $defectInfo = $defect->description ?: 'No description';
             $defectLocation = $defect->location;
-            
+
             // Delete the image file
             if ($defect->image_path) {
                 Storage::disk('public')->delete($defect->image_path);
@@ -1442,7 +1455,7 @@ class BookingController extends Controller
             ]);
 
             $defects = SnaggingDefect::where('booking_id', $booking->id)->get();
-            
+
             // Convert defect images to base64 using Storage facade
             foreach ($defects as $defect) {
                 if ($defect->image_path) {
@@ -1454,15 +1467,15 @@ class BookingController extends Controller
                     }
                 }
             }
-            
+
             // Get co-owners
             $coOwners = $booking->unit->users->where('id', '!=', $booking->user_id)->values();
-            
+
             // Get signature data from request
             $signatureName = $request->input('signature_name', '');
             $signatureImage = $request->input('signature_image', '');
             $signaturesData = $request->input('signatures_data', null);
-            
+
             // Save signatures to booking (only Part 1 and Part 2)
             if ($signaturesData) {
                 if (isset($signaturesData['part1']) && !empty($signaturesData['part1'])) {
@@ -1473,24 +1486,24 @@ class BookingController extends Controller
                 }
                 $booking->save();
             }
-            
+
             // Convert letterhead images to base64 using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
             $footerBanner = '';
-            
+
             if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
                 $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                 $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/footer-banner.png')) {
                 $footerBanner = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/footer-banner.png'));
             }
-            
+
             // Prepare data arrays for template
             $seller = [
                 'name' => 'Vantage Ventures Real Estate Development L.L.C.',
@@ -1498,26 +1511,26 @@ class BookingController extends Controller
                 'phone' => '+971 58 898 0456',
                 'email' => 'vantage@zedcapital.ae'
             ];
-            
+
             $purchaser = [
                 'name' => $booking->user->full_name ?? '',
                 'address' => $booking->user->address ?? 'N/A',
                 'phone' => $booking->user->mobile_number ?? '',
                 'email' => $booking->user->email ?? ''
             ];
-            
+
             $property = [
                 'master_community' => 'VIERA Residences, Business Bay, Dubai',
                 'building' => $booking->unit->building ?? $booking->unit->property->building_name ?? '',
                 'unit_number' => $booking->unit->unit ?? ''
             ];
-            
+
             $logos = [
                 'left' => $vieraLogo,
                 'right' => $vantageLogo
             ];
-            
-            $date = now()->format('d M Y');            
+
+            $date = now()->format('d M Y');
             // Generate HTML content for PDF
             $html = view('declaration-pdf-v3', [
                 'date' => $date,
@@ -1574,34 +1587,34 @@ class BookingController extends Controller
 
             // Get form data from request
             $formData = $request->all();
-            
+
             // Get co-owners
             $coOwners = $booking->unit->users->where('id', '!=', $booking->user_id)->values();
-            
+
             // Convert letterhead images to base64 using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
             $footerBanner = '';
-            
+
             if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
                 $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                 $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/footer-banner.png')) {
                 $footerBanner = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/footer-banner.png'));
             }
-            
+
             $logos = [
                 'left' => $vieraLogo,
                 'right' => $vantageLogo
             ];
-            
+
             $date = now()->format('d M Y');
-            
+
             // Generate HTML content for PDF
             $html = view('handover-checklist-pdf', [
                 'date' => $date,
@@ -1625,28 +1638,28 @@ class BookingController extends Controller
             $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
             $filename = 'handover_checklist_' . time() . '.pdf';
             $storagePath = $folderPath . '/' . $filename;
-            
+
             // Delete existing handover checklist if it exists
             $existingAttachment = $unit->attachments()->where('type', 'handover_checklist')->first();
             if ($existingAttachment) {
                 \Storage::disk('public')->delete($folderPath . '/' . $existingAttachment->filename);
                 $existingAttachment->delete();
             }
-            
+
             // Save the PDF
             \Storage::disk('public')->put($storagePath, $pdf->output());
-            
+
             // Create attachment record
             $attachment = $unit->attachments()->create([
                 'filename' => $filename,
                 'type' => 'handover_checklist',
             ]);
-            
+
             // Update booking record with path
             $booking->update([
                 'handover_checklist' => $storagePath,
             ]);
-            
+
             // Add remark for file generation
             Remark::create([
                 'unit_id' => $unit->id,
@@ -1684,15 +1697,15 @@ class BookingController extends Controller
             // Convert letterhead images to base64 using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
-            
+
             if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
                 $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                 $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
-            
+
             // Prepare blank data for template
             $seller = [
                 'name' => 'Vantage Ventures Real Estate Development L.L.C.',
@@ -1700,33 +1713,33 @@ class BookingController extends Controller
                 'phone' => '+971 58 898 0456',
                 'email' => 'vantage@zedcapital.ae'
             ];
-            
+
             $purchaser = [
                 'name' => '', // Blank
                 'address' => '',
                 'phone' => '',
                 'email' => ''
             ];
-            
+
             // Empty co-owners for blank template
             $coOwners = collect();
-            
+
             $property = [
                 'master_community' => 'VIERA Residences, Business Bay, Dubai',
                 'building' => '',
                 'unit_number' => ''
             ];
-            
+
             $logos = [
                 'left' => $vieraLogo,
                 'right' => $vantageLogo
             ];
-            
+
             $date = '';  // Blank date
-            
+
             // Empty defects array for blank template
             $defects = [];
-            
+
             // Generate HTML content for PDF with blank fields
             $html = view('declaration-pdf-v3', [
                 'date' => $date,
@@ -1770,46 +1783,46 @@ class BookingController extends Controller
             // Convert letterhead images to base64 using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
-            
+
             if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
                 $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                 $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
-            
+
             $logos = [
                 'left' => $vieraLogo,
                 'right' => $vantageLogo
             ];
-            
+
             $date = '';  // Blank date
-            
+
             // Empty form data for blank template
             $formData = [];
-            
+
             // Empty co-owners for blank template
             $coOwners = collect();
-            
+
             // Create blank purchaser object
             $blankPurchaser = (object) [
                 'full_name' => '',
                 'email' => '',
                 'phone' => ''
             ];
-            
+
             // Create blank unit object
             $blankUnit = (object) [
                 'unit' => ''
             ];
-            
+
             // Create blank property object
             $blankProperty = (object) [
                 'project_name' => 'VIERA Residences',
                 'location' => 'Business Bay, Dubai'
             ];
-            
+
             // Generate HTML content for PDF with blank fields
             $html = view('handover-checklist-pdf', [
                 'date' => $date,

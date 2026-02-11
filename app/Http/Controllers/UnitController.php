@@ -977,6 +977,54 @@ class UnitController extends Controller
     /**
      * Update payment details for a single unit and generate SOA
      */
+    /**
+     * Update payment details only without generating SOA
+     */
+    public function updatePaymentDetailsOnly(Request $request, $id)
+    {
+        $request->validate([
+            'total_unit_price' => 'nullable|numeric',
+            'dld_fees' => 'nullable|numeric',
+            'admin_fee' => 'nullable|numeric',
+            'amount_to_pay' => 'nullable|numeric',
+            'total_amount_paid' => 'nullable|numeric',
+            'outstanding_amount' => 'nullable|numeric',
+            'upon_completion_amount' => 'nullable|numeric',
+            'due_after_completion' => 'nullable|numeric',
+            'has_pho' => 'nullable|boolean',
+        ]);
+
+        try {
+            $unit = Unit::with(['property', 'users'])->findOrFail($id);
+
+            // Update payment details
+            $unit->update([
+                'total_unit_price' => $request->total_unit_price,
+                'dld_fees' => $request->dld_fees,
+                'admin_fee' => $request->admin_fee,
+                'amount_to_pay' => $request->amount_to_pay,
+                'total_amount_paid' => $request->total_amount_paid,
+                'outstanding_amount' => $request->outstanding_amount,
+                'upon_completion_amount' => $request->upon_completion_amount,
+                'due_after_completion' => $request->due_after_completion,
+                'has_pho' => $request->has_pho ?? false,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment details updated successfully',
+                'unit' => $unit->fresh(['property', 'users', 'attachments']),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update payment details',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function updateSingleUnitPaymentDetails(Request $request, $id)
     {
         $request->validate([
@@ -1101,6 +1149,7 @@ class UnitController extends Controller
                 ['type' => 'ac_connection', 'label' => 'AC Connection', 'required' => true],
                 ['type' => 'dewa_connection', 'label' => 'DEWA Connection', 'required' => true],
                 ['type' => 'service_charge_ack_buyer', 'label' => 'Service Charge Acknowledgement (Signed by Buyer)', 'required' => true],
+                ['type' => 'finance_clearance', 'label' => 'Finance Clearance', 'required' => true],
             ];
 
             if ($unit->has_mortgage) {
@@ -2290,6 +2339,122 @@ class UnitController extends Controller
     }
 
     /**
+     * Generate Finance Clearance PDF
+     */
+    public function generateClearance(Request $request, $id)
+    {
+        try {
+            $unit = Unit::with(['users', 'property'])->findOrFail($id);
+            $admin = $request->user();
+
+            // Validate request
+            $validated = $request->validate([
+                'requirement1' => 'required|boolean',
+                'requirement2' => 'required|boolean',
+                'requirement3' => 'required|boolean',
+                'requirement4' => 'required|string|in:yes,nil',
+                'requirement4_amount' => 'nullable|numeric|min:0',
+                'requirement5' => 'required|string|in:yes,nil',
+                'requirement5_amount' => 'nullable|numeric|min:0',
+                'requirement6' => 'required|boolean',
+                'remarks' => 'nullable|string',
+            ]);
+
+            // Get all owners
+            $owners = $unit->users;
+            if ($owners->isEmpty()) {
+                return response()->json(['message' => 'No owners found for this unit'], 404);
+            }
+
+            // Get primary owner
+            $primaryOwner = $owners->where('pivot.is_primary', true)->first() ?? $owners->first();
+
+            // Get logos using Storage facade
+            $vieraLogo = '';
+            $vantageLogo = '';
+            
+            if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
+                $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
+            }
+            
+            if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
+                $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
+            }
+
+            $logos = [
+                'left' => $vieraLogo,
+                'right' => $vantageLogo
+            ];
+
+            // Calculate payment details
+            $totalUnitPrice = $unit->total_unit_price ?? 0;
+            $dldFees = $unit->dld_fees ?? 0;
+            $adminFee = $unit->admin_fee ?? 0;
+            $totalDldAndAdmin = $dldFees + $adminFee;
+            $totalAmount = $unit->amount_to_pay ?? 0;
+            $totalReceived = $unit->total_amount_paid ?? 0;
+            $amountPaidTowardsPurchase = min($totalReceived, $totalUnitPrice);
+            $excessPayment = max(0, $totalReceived - $totalAmount);
+            $percentageCompleted = $totalUnitPrice > 0 ? ($totalReceived / $totalUnitPrice * 100) : 0;
+
+            // Generate PDF
+            $pdf = \PDF::loadView('pdfs.clearance', [
+                'date' => now()->format('d/m/Y'),
+                'unit' => $unit,
+                'property' => $unit->property,
+                'client_name' => $primaryOwner->full_name,
+                'purchase_price' => $totalUnitPrice,
+                'dld_and_admin' => $totalDldAndAdmin,
+                'total_amount' => $totalAmount,
+                'total_received' => $totalReceived,
+                'amount_paid_towards_purchase' => $amountPaidTowardsPurchase,
+                'excess_payment' => $excessPayment,
+                'percentage_completed' => $percentageCompleted,
+                'requirement1' => $validated['requirement1'] ? 'YES' : 'NO',
+                'requirement2' => $validated['requirement2'] ? 'YES' : 'NO',
+                'requirement3' => $validated['requirement3'] ? 'YES' : 'NO',
+                'requirement4' => strtoupper($validated['requirement4']),
+                'requirement4_amount' => $validated['requirement4_amount'] ?? null,
+                'requirement5' => strtoupper($validated['requirement5']),
+                'requirement5_amount' => $validated['requirement5_amount'] ?? null,
+                'requirement6' => $validated['requirement6'] ? 'YES' : 'NO',
+                'remarks' => $validated['remarks'] ?? '',
+                'logos' => $logos,
+            ]);
+
+            $filename = 'Finance_Clearance_' . $unit->property->project_name . '_Unit_' . $unit->unit . '.pdf';
+            
+            // Save PDF as attachment
+            $pdfContent = $pdf->output();
+            $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
+            $filepath = $folderPath . '/' . $filename;
+            \Storage::disk('public')->put($filepath, $pdfContent);
+            
+            // Create attachment record
+            $attachment = $unit->attachments()->create([
+                'filename' => $filename,
+                'filepath' => $filepath,
+                'type' => 'finance_clearance',
+            ]);
+            
+            // Add timeline remark
+            $adminName = $admin->full_name ?? 'Admin';
+            $unit->remarks()->create([
+                'date' => now()->format('Y-m-d'),
+                'time' => now()->format('H:i:s'),
+                'event' => "Finance clearance generated by {$adminName}",
+                'admin_name' => $adminName,
+                'type' => 'clearance_generated'
+            ]);
+            
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            \Log::error('Clearance generation failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to generate clearance: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Get preview of developer requirements email
      */
     public function previewDeveloperRequirements($id)
@@ -2339,7 +2504,16 @@ class UnitController extends Controller
                         'full_url' => $doc->full_url,
                     ];
                 })->values()->toArray(),
-                'recipient_email' => 'vantage@zedcapital.ae',
+                'recipient_emails' => ['inquire@vantageventures.ae', 'mtsen@evanlimpenta.com'],
+                'cc_emails' => [
+                    'vantage@zedcapital.ae',
+                    'docs@zedcapital.ae',
+                    'admin@zedcapital.ae',
+                    'clientsupport@zedcapital.ae',
+                    'operations@zedcapital.ae',
+                    'president@zedcapital.ae',
+                    'wbd@zedcapital.ae'
+                ],
                 'subject' => 'Handover Requirements - Unit ' . $unit->unit . ' - ' . $unit->property->project_name,
             ]);
         } catch (\Exception $e) {
@@ -2360,7 +2534,7 @@ class UnitController extends Controller
             $unit = Unit::with(['users', 'property', 'attachments'])->findOrFail($id);
 
             // Check if buyer requirements are complete
-            $buyerRequirementTypes = ['payment_proof', 'ac_connection', 'dewa_connection', 'service_charge_ack_buyer'];
+            $buyerRequirementTypes = ['payment_proof', 'ac_connection', 'dewa_connection', 'service_charge_ack_buyer', 'finance_clearance'];
             if ($unit->has_mortgage) {
                 $buyerRequirementTypes[] = 'bank_noc';
             }
@@ -2368,7 +2542,7 @@ class UnitController extends Controller
             $uploadedBuyerDocs = $unit->attachments->whereIn('type', $buyerRequirementTypes);
             
             if ($uploadedBuyerDocs->count() < count($buyerRequirementTypes)) {
-                return response()->json(['message' => 'Buyer requirements are not complete'], 400);
+                return response()->json(['message' => 'Buyer requirements are not complete. Missing required documents.'], 400);
             }
 
             // Get primary owner
@@ -2421,7 +2595,8 @@ class UnitController extends Controller
                     ->cc([
                         'vantage@zedcapital.ae',
                         'docs@zedcapital.ae',
-                        'admin@zedcapital.ae',
+                        'accounts@zedcapital.ae',
+                        'finance@zedcapital.ae',
                         'clientsupport@zedcapital.ae',
                         'operations@zedcapital.ae',
                         'president@zedcapital.ae',
@@ -2713,5 +2888,149 @@ class UnitController extends Controller
         // Convert to float
         return is_numeric($cleanValue) ? (float) $cleanValue : null;
     }
-}
 
+    /**
+     * Get all unit remarks (admin only)
+     */
+    public function getAllRemarks(Request $request)
+    {
+        try {
+            $perPage = $request->input('per_page', 20);
+            $page = $request->input('page', 1);
+
+            $query = \App\Models\UnitRemark::with([
+                'unit.property',
+                'unit.users'
+            ])
+            ->orderBy('created_at', 'desc');
+
+            // Apply filters
+            if ($request->has('date_from')) {
+                $query->where('date', '>=', $request->input('date_from'));
+            }
+            if ($request->has('date_to')) {
+                $query->where('date', '<=', $request->input('date_to'));
+            }
+            if ($request->has('time')) {
+                $query->where('time', $request->input('time'));
+            }
+            if ($request->has('unit')) {
+                $query->whereHas('unit', function($q) use ($request) {
+                    $q->where('unit', 'like', '%' . $request->input('unit') . '%');
+                });
+            }
+            if ($request->has('project') && $request->input('project') !== 'all') {
+                $query->whereHas('unit.property', function($q) use ($request) {
+                    $q->where('project_name', $request->input('project'));
+                });
+            }
+
+            $paginated = $query->paginate($perPage, ['*'], 'page', $page);
+
+            $remarks = $paginated->map(function ($remark) {
+                return [
+                    'id' => $remark->id,
+                    'unit_id' => $remark->unit_id,
+                    'remark' => $remark->event,
+                    'type' => $remark->type,
+                    'created_at' => $remark->created_at,
+                    'unit' => [
+                        'id' => $remark->unit?->id,
+                        'unit_number' => $remark->unit?->unit,
+                        'property' => [
+                            'id' => $remark->unit?->property?->id,
+                            'project_name' => $remark->unit?->property?->project_name,
+                        ]
+                    ],
+                    'created_by' => [
+                        'full_name' => $remark->admin_name,
+                        'email' => null, // admin_name is stored as string in unit_remarks
+                    ]
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'remarks' => $remarks,
+                'pagination' => [
+                    'current_page' => $paginated->currentPage(),
+                    'last_page' => $paginated->lastPage(),
+                    'per_page' => $paginated->perPage(),
+                    'total' => $paginated->total(),
+                    'has_more' => $paginated->hasMorePages()
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch remarks',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Export remarks to CSV
+     */
+    public function exportRemarks(Request $request)
+    {
+        try {
+            $query = \App\Models\UnitRemark::with([
+                'unit.property',
+                'unit.users'
+            ])
+            ->orderBy('created_at', 'desc');
+
+            // Apply same filters as getAllRemarks
+            if ($request->has('date_from')) {
+                $query->where('date', '>=', $request->input('date_from'));
+            }
+            if ($request->has('date_to')) {
+                $query->where('date', '<=', $request->input('date_to'));
+            }
+            if ($request->has('time')) {
+                $query->where('time', $request->input('time'));
+            }
+            if ($request->has('unit')) {
+                $query->whereHas('unit', function($q) use ($request) {
+                    $q->where('unit', 'like', '%' . $request->input('unit') . '%');
+                });
+            }
+            if ($request->has('project') && $request->input('project') !== 'all') {
+                $query->whereHas('unit.property', function($q) use ($request) {
+                    $q->where('project_name', $request->input('project'));
+                });
+            }
+
+            $remarks = $query->get();
+
+            // Create CSV content
+            $csv = "Date,Time,Unit Number,Project,Remark,Type,Created By,Created At\n";
+            
+            foreach ($remarks as $remark) {
+                $csv .= sprintf(
+                    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                    $remark->date,
+                    $remark->time,
+                    $remark->unit?->unit ?? 'N/A',
+                    $remark->unit?->property?->project_name ?? 'N/A',
+                    str_replace('"', '""', $remark->event), // Escape quotes in CSV
+                    $remark->type ?? 'N/A',
+                    $remark->admin_name ?? 'System',
+                    $remark->created_at->format('Y-m-d H:i:s')
+                );
+            }
+
+            return response($csv, 200)
+                ->header('Content-Type', 'text/csv')
+                ->header('Content-Disposition', 'attachment; filename="remarks-export-' . date('Y-m-d-His') . '.csv"');
+                
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to export remarks',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+}
