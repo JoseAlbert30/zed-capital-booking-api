@@ -1893,6 +1893,80 @@ class UnitController extends Controller
     }
 
     /**
+     * Calibrate amount_to_pay for all units based on total_unit_price + dld_fees + admin_fee
+     */
+    public function calibrateAllAmounts(Request $request)
+    {
+        try {
+            \Log::info("=== AMOUNT CALIBRATION STARTED ===", [
+                'user' => $request->user()->full_name ?? 'Unknown'
+            ]);
+
+            // Get all units that have payment details
+            $units = Unit::whereNotNull('total_unit_price')
+                ->orWhereNotNull('dld_fees')
+                ->orWhereNotNull('admin_fee')
+                ->get();
+
+            $updatedCount = 0;
+            $skippedCount = 0;
+
+            foreach ($units as $unit) {
+                // Calculate the correct amount_to_pay
+                $totalUnitPrice = floatval($unit->total_unit_price ?? 0);
+                $dldFees = floatval($unit->dld_fees ?? 0);
+                $adminFee = floatval($unit->admin_fee ?? 0);
+                
+                $calculatedAmount = $totalUnitPrice + $dldFees + $adminFee;
+                
+                // Only update if there's a difference
+                if ($calculatedAmount != floatval($unit->amount_to_pay ?? 0)) {
+                    $unit->amount_to_pay = $calculatedAmount;
+                    $unit->save();
+                    $updatedCount++;
+                    
+                    \Log::info("Updated unit amount", [
+                        'unit_id' => $unit->id,
+                        'unit_number' => $unit->unit,
+                        'old_amount' => $unit->amount_to_pay,
+                        'new_amount' => $calculatedAmount,
+                        'calculation' => "{$totalUnitPrice} + {$dldFees} + {$adminFee}"
+                    ]);
+                } else {
+                    $skippedCount++;
+                }
+            }
+
+            \Log::info("=== AMOUNT CALIBRATION COMPLETED ===", [
+                'total_units' => $units->count(),
+                'updated' => $updatedCount,
+                'skipped' => $skippedCount
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Calibrated {$updatedCount} unit(s). {$skippedCount} already correct.",
+                'updated_count' => $updatedCount,
+                'skipped_count' => $skippedCount,
+                'total_count' => $units->count()
+            ], 200);
+
+        } catch (\Exception $e) {
+            \Log::error("=== AMOUNT CALIBRATION FAILED ===", [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to calibrate amounts',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get SOA generation batch progress
      */
     public function getSOAGenerationProgress($batchId)
