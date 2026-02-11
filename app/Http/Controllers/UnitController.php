@@ -2357,6 +2357,7 @@ class UnitController extends Controller
                 'requirement5' => 'required|string|in:yes,nil',
                 'requirement5_amount' => 'nullable|numeric|min:0',
                 'requirement6' => 'required|boolean',
+                'requirement7' => 'required|string|in:yes,nil',
                 'remarks' => 'nullable|string',
             ]);
 
@@ -2418,6 +2419,7 @@ class UnitController extends Controller
                 'requirement5' => strtoupper($validated['requirement5']),
                 'requirement5_amount' => $validated['requirement5_amount'] ?? null,
                 'requirement6' => $validated['requirement6'] ? 'YES' : 'NO',
+                'requirement7' => strtoupper($validated['requirement7']),
                 'remarks' => $validated['remarks'] ?? '',
                 'logos' => $logos,
             ]);

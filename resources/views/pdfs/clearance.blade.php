@@ -347,6 +347,10 @@
                 <td class="requirement-label">6. TITLE DEED FEE PAID</td>
                 <td class="requirement-value {{ strtolower($requirement6) }}">{{ $requirement6 }}</td>
             </tr>
+            <tr>
+                <td class="requirement-label">7. PDC FOR POST HANDOVER PAYMENT PLAN (IF APPLICABLE)</td>
+                <td class="requirement-value {{ strtolower($requirement7) }}">{{ $requirement7 }}</td>
+            </tr>
         </tbody>
     </table>
 
