@@ -151,6 +151,7 @@ return [
         'mayada@zedcapitalbooking.com',
         'sleiman@zedcapitalbooking.com',
         'devi@zedcapitalbooking.com',
+        'finance@zedcapitalbooking.com',
     ],
 
     /*
