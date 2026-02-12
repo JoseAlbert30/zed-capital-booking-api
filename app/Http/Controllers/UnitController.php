@@ -2520,6 +2520,17 @@ class UnitController extends Controller
 
             $filename = 'Finance_Clearance_' . $unit->property->project_name . '_Unit_' . $unit->unit . '.pdf';
             
+            // Delete previous finance clearance attachments
+            $existingClearances = $unit->attachments()->where('type', 'finance_clearance')->get();
+            foreach ($existingClearances as $clearance) {
+                // Delete file from storage
+                if (\Storage::disk('public')->exists($clearance->filepath)) {
+                    \Storage::disk('public')->delete($clearance->filepath);
+                }
+                // Delete database record
+                $clearance->delete();
+            }
+            
             // Save PDF as attachment
             $pdfContent = $pdf->output();
             $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
@@ -2532,6 +2543,7 @@ class UnitController extends Controller
                 'filepath' => $filepath,
                 'type' => 'finance_clearance',
             ]);
+
             
             // Add timeline remark
             $adminName = $admin->full_name ?? 'Admin';
