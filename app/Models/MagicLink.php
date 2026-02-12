@@ -15,6 +15,7 @@ class MagicLink extends Model
         'used_at',
         'ip_address',
         'user_agent',
+        'access_count',
     ];
 
     protected $casts = [
@@ -47,7 +48,7 @@ class MagicLink extends Model
      */
     public function isValid(): bool
     {
-        return $this->used_at === null && $this->expires_at->isFuture();
+        return $this->access_count < 3 && $this->expires_at->isFuture();
     }
 
     /**
@@ -55,6 +56,7 @@ class MagicLink extends Model
      */
     public function markAsUsed(?string $ipAddress = null, ?string $userAgent = null): void
     {
+        $this->increment('access_count');
         $this->update([
             'used_at' => now(),
             'ip_address' => $ipAddress,

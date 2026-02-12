@@ -106,10 +106,13 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid booking link'], 404);
         }
 
-        // Check if valid (not used and not expired)
+        // Check if valid (not exceeded access limit and not expired)
         if (!$magicLink->isValid()) {
-            $reason = $magicLink->used_at ? 'already been used' : 'expired';
-            return response()->json(['message' => "This booking link has {$reason}"], 400);
+            if ($magicLink->access_count >= 3) {
+                return response()->json(['message' => 'This booking link has expired (maximum access limit reached)'], 400);
+            } else {
+                return response()->json(['message' => 'This booking link has expired'], 400);
+            }
         }
 
         // Mark as used
