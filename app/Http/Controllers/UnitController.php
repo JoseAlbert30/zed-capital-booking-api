@@ -2476,11 +2476,10 @@ class UnitController extends Controller
                 if ($totalAmount == 0) {
                     $totalAmount = $totalUnitPrice + $totalDldAndAdmin;
                 }
-                // Set total received to match total amount (fully paid)
-                $totalReceived = $totalAmount;
+                // For PHO units, show full amounts as paid (don't override totalReceived from database)
                 $amountPaidTowardsPurchase = $totalUnitPrice;
                 $amountPaidTowardsDldAdmin = $totalDldAndAdmin;
-                $excessPayment = 0;
+                $excessPayment = max(0, $totalReceived - $totalAmount);
                 $percentageCompleted = 100;
             } else {
                 $amountPaidTowardsPurchase = min($totalReceived, $totalUnitPrice);
