@@ -2467,7 +2467,7 @@ class UnitController extends Controller
             $adminFee = $unit->admin_fee ?? 0;
             $totalDldAndAdmin = $dldFees + $adminFee;
             $totalAmount = $unit->amount_to_pay ?? 0;
-            $totalReceived = $unit->total_amount_paid ?? 0;
+            $totalReceived = $unit->total_amount ?? 0;
             $hasPHO = $unit->has_pho ?? false;
             
             // For PHO units, calculate proper values based on purchase price and DLD+admin
