@@ -381,14 +381,16 @@
                 </tr>
                 @endif
             @else
-                @if($unit->outstanding_amount !== null)
+                @php
+                    // Calculate outstanding balance dynamically for non-PHO units
+                    $calculatedOutstandingBalance = ($unit->amount_to_pay ?? 0) - ($unit->total_amount_paid ?? 0);
+                @endphp
                 <tr class="outstanding-row">
                     <td><strong>Outstanding Balance</strong></td>
-                    <td class="text-right amount" style="color: {{ $unit->outstanding_amount > 0 ? '#dc3545' : '#28a745' }};">
-                        {{ number_format($unit->outstanding_amount, 2) }}
+                    <td class="text-right amount" style="color: {{ $calculatedOutstandingBalance > 0 ? '#dc3545' : '#28a745' }};">
+                        {{ number_format($calculatedOutstandingBalance, 2) }}
                     </td>
                 </tr>
-                @endif
             @endif
         </tbody>
     </table>
@@ -425,13 +427,17 @@
         @endif
     </div>
     @else
+    @php
+        // Calculate actual outstanding amount dynamically
+        $calculatedOutstanding = ($unit->amount_to_pay ?? 0) - ($unit->total_amount_paid ?? 0);
+    @endphp
     <div class="summary-box">
         <div class="summary-row">
             <div class="summary-label">Payment Status:</div>
-            <div class="summary-amount" style="color: {{ $unit->outstanding_amount > 0 ? '#dc3545' : '#28a745' }};">
-                @if($unit->outstanding_amount > 0)
+            <div class="summary-amount" style="color: {{ $calculatedOutstanding > 0 ? '#dc3545' : '#28a745' }};">
+                @if($calculatedOutstanding > 0)
                     BALANCE DUE
-                @elseif($unit->outstanding_amount < 0)
+                @elseif($calculatedOutstanding < 0)
                     OVERPAID
                 @else
                     FULLY PAID
@@ -439,18 +445,18 @@
             </div>
         </div>
         
-        @if($unit->outstanding_amount > 0)
+        @if($calculatedOutstanding > 0)
         <div class="summary-row">
             <div class="summary-label">Amount Due:</div>
             <div class="summary-amount" style="color: #dc3545;">
-                AED {{ number_format($unit->outstanding_amount, 2) }}
+                AED {{ number_format($calculatedOutstanding, 2) }}
             </div>
         </div>
-        @elseif($unit->outstanding_amount < 0)
+        @elseif($calculatedOutstanding < 0)
         <div class="summary-row">
             <div class="summary-label">Credit Balance:</div>
             <div class="summary-amount" style="color: #28a745;">
-                AED {{ number_format(abs($unit->outstanding_amount), 2) }}
+                AED {{ number_format(abs($calculatedOutstanding), 2) }}
             </div>
         </div>
         @endif
