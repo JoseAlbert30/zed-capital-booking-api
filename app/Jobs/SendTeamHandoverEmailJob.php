@@ -109,7 +109,7 @@ class SendTeamHandoverEmailJob implements ShouldQueue
                 'customerMobile' => $booking->user->mobile_number,
                 'coOwners' => $coOwners,
                 'appointmentDate' => $appointmentDate,
-                'appointmentTime' => $booking->booked_time,
+                'appointmentTime' => \Carbon\Carbon::createFromFormat('H:i', $booking->booked_time)->format('g:i A'),
             ], function ($mail) use ($booking, $unit, $mainRecipients, $ccRecipients) {
                 // Send to main recipients
                 $mail->to($mainRecipients);

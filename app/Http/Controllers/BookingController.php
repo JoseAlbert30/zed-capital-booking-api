@@ -260,12 +260,13 @@ class BookingController extends Controller
 
         // Add remark for booking creation to the unit
         $formattedDate = Carbon::parse($request->booked_date)->format('M d, Y');
+        $formattedTime = Carbon::createFromFormat('H:i', $request->booked_time)->format('g:i A');
         $attendanceStatus = $isOwnerAttending ? 'by owner' : 'with POA (pending approval)';
         $bookedByInfo = $isAdminBooking ? "by admin ({$user->full_name}) on behalf of owner" : "by owner";
         $unit->remarks()->create([
             'date' => now()->format('Y-m-d'),
             'time' => now()->format('H:i:s'),
-            'event' => "Handover appointment booked for {$formattedDate} at {$request->booked_time} {$attendanceStatus} {$bookedByInfo}",
+            'event' => "Handover appointment booked for {$formattedDate} at {$formattedTime} {$attendanceStatus} {$bookedByInfo}",
             'type' => 'booking_created',
             'admin_name' => $isAdminBooking ? $user->full_name : 'System',
         ]);
@@ -289,7 +290,7 @@ class BookingController extends Controller
             })->values()->toArray();
 
             $appointmentDate = Carbon::parse($request->booked_date)->format('l, F j, Y');
-            $appointmentTime = $request->booked_time;
+            $appointmentTime = Carbon::createFromFormat('H:i', $request->booked_time)->format('g:i A');
 
             Mail::send('emails.admin-booking-notification', [
                 'isPending' => $isPending,
@@ -387,7 +388,7 @@ class BookingController extends Controller
                 }
 
                 $appointmentDate = Carbon::parse($request->booked_date)->format('l, F j, Y');
-                $appointmentTime = $request->booked_time;
+                $appointmentTime = Carbon::createFromFormat('H:i', $request->booked_time)->format('g:i A');
 
                 // Send email to all owners
                 Mail::send('emails.booking-confirmation', [
@@ -422,10 +423,11 @@ class BookingController extends Controller
                 });
 
                 // Add remark for confirmation email sent to unit
+                $confirmEmailTime = Carbon::createFromFormat('H:i', $request->booked_time)->format('g:i A');
                 $unit->remarks()->create([
                     'date' => now()->format('Y-m-d'),
                     'time' => now()->format('H:i:s'),
-                    'event' => "Booking confirmation email sent to " . count($allOwners) . " owner(s) for appointment on {$formattedDate} at {$request->booked_time}",
+                    'event' => "Booking confirmation email sent to " . count($allOwners) . " owner(s) for appointment on {$formattedDate} at {$confirmEmailTime}",
                     'type' => 'email_sent',
                     'admin_name' => 'System',
                 ]);
@@ -508,10 +510,12 @@ class BookingController extends Controller
 
         // Add remark for booking rescheduling
         $oldFormattedDate = Carbon::parse($oldDate)->format('M d, Y');
+        $oldFormattedTime = Carbon::createFromFormat('H:i', $oldTime)->format('g:i A');
         $newFormattedDate = Carbon::parse($booking->booked_date)->format('M d, Y');
+        $newFormattedTime = Carbon::createFromFormat('H:i', $booking->booked_time)->format('g:i A');
 
         $bookingUser->remarks()->create([
-            'event' => "Handover appointment rescheduled from {$oldFormattedDate} at {$oldTime} to {$newFormattedDate} at {$booking->booked_time} (Admin)",
+            'event' => "Handover appointment rescheduled from {$oldFormattedDate} at {$oldFormattedTime} to {$newFormattedDate} at {$newFormattedTime} (Admin)",
             'type' => 'booking_rescheduled',
             'date' => $booking->booked_date,
             'time' => $booking->booked_time,
@@ -544,9 +548,9 @@ class BookingController extends Controller
             }
 
             $oldAppointmentDate = Carbon::parse($oldDate)->format('l, F j, Y');
-            $oldAppointmentTime = $oldTime;
+            $oldAppointmentTime = Carbon::createFromFormat('H:i', $oldTime)->format('g:i A');
             $newAppointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
-            $newAppointmentTime = $booking->booked_time;
+            $newAppointmentTime = Carbon::createFromFormat('H:i', $booking->booked_time)->format('g:i A');
 
             Mail::send('emails.booking-rescheduled', [
                 'firstName' => $greeting,
@@ -652,7 +656,7 @@ class BookingController extends Controller
             }
 
             $appointmentDate = Carbon::parse($bookedDate)->format('l, F j, Y');
-            $appointmentTime = $bookedTime;
+            $appointmentTime = Carbon::createFromFormat('H:i', $bookedTime)->format('g:i A');
 
             Mail::send('emails.booking-cancelled', [
                 'firstName' => $greeting,
@@ -739,7 +743,7 @@ class BookingController extends Controller
             $unit->remarks()->create([
                 'date' => now()->format('Y-m-d'),
                 'time' => now()->format('H:i:s'),
-                'event' => "POA booking approved for appointment on {$formattedDate} at {$booking->booked_time} - Approved by {$user->full_name}",
+                'event' => "POA booking approved for appointment on {$formattedDate} at " . Carbon::createFromFormat('H:i', $booking->booked_time)->format('g:i A') . " - Approved by {$user->full_name}",
                 'type' => 'poa_approved',
                 'admin_name' => $user->full_name,
             ]);
@@ -764,7 +768,7 @@ class BookingController extends Controller
                 }
 
                 $appointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
-                $appointmentTime = $booking->booked_time;
+                $appointmentTime = Carbon::createFromFormat('H:i', $booking->booked_time)->format('g:i A');
 
                 // Send confirmation email
                 Mail::send('emails.booking-confirmation', [
@@ -847,7 +851,7 @@ class BookingController extends Controller
                 }
 
                 $appointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
-                $appointmentTime = $booking->booked_time;
+                $appointmentTime = Carbon::createFromFormat('H:i', $booking->booked_time)->format('g:i A');
 
                 \Log::info('Sending POA rejection email', [
                     'unit_id' => $unit->id,
