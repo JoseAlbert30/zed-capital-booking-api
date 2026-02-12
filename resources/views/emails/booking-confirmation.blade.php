@@ -126,7 +126,7 @@
             <p><strong>Unit Number:</strong> {{ $unitNumber ?? '[Insert Unit Number]' }}</p>
             <p><strong>Date:</strong> {{ $appointmentDate }}</p>
             <p><strong>Time:</strong> {{ $appointmentTime }}</p>
-            <p><strong>Location:</strong> Viera Residences, {{ $locationPin ?? 'Dubai Production City, Dubai' }}</p>
+            <p><strong>Location:</strong> Viera Residences, Dubai Production City, Dubai</p>
 
             <hr style="border: 0; border-top: 1px solid #d6d6d6; margin: 20px 0;">
 

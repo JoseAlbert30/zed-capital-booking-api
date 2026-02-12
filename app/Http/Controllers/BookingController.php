@@ -1520,7 +1520,7 @@ class BookingController extends Controller
             ];
 
             $property = [
-                'master_community' => 'VIERA Residences, Business Bay, Dubai',
+                'master_community' => 'VIERA Residences, Dubai Production City, Dubai',
                 'building' => $booking->unit->building ?? $booking->unit->property->building_name ?? '',
                 'unit_number' => $booking->unit->unit ?? ''
             ];
@@ -1725,7 +1725,7 @@ class BookingController extends Controller
             $coOwners = collect();
 
             $property = [
-                'master_community' => 'VIERA Residences, Business Bay, Dubai',
+                'master_community' => 'VIERA Residences, Dubai Production City, Dubai',
                 'building' => '',
                 'unit_number' => ''
             ];
@@ -1820,7 +1820,7 @@ class BookingController extends Controller
             // Create blank property object
             $blankProperty = (object) [
                 'project_name' => 'VIERA Residences',
-                'location' => 'Business Bay, Dubai'
+                'location' => 'Dubai Production City, Dubai'
             ];
 
             // Generate HTML content for PDF with blank fields

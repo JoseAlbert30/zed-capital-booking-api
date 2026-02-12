@@ -17,7 +17,7 @@ class PropertySeeder extends Seeder
             ['project_name' => 'Viera Residences'],
             [
                 'project_name' => 'Viera Residences',
-                'location' => 'Business Bay, Dubai',
+                'location' => 'Dubai Production City, Dubai',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]
