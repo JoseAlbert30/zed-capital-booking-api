@@ -71,7 +71,7 @@
     @endif
     
     <div class="content">
-    <h1>Subject: Undertaking letter to pay service charge from {{ $date }}</h1>
+    <h1>Subject: Undertaking letter to pay service charge from February 04, 2026</h1>
     
     <p>Dear Better Communities Owner Association Management,</p>
     
@@ -95,7 +95,7 @@
     </p>
     
     <p>
-        I/We hereby commit to settle the service charge for the mentioned project as and when issued starting from <strong>{{ $date }}</strong>.
+        I/We hereby commit to settle the service charge for the mentioned project as and when issued starting from <strong>February 04, 2026</strong>.
     </p>
     
     <div class="signature-section">
