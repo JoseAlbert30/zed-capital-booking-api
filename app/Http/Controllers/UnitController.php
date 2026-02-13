@@ -121,6 +121,9 @@ class UnitController extends Controller
                 }
             }
 
+            // Order by unit number in ascending order
+            $query->orderByRaw('CAST(unit AS UNSIGNED) ASC');
+
             // Pagination support
             $perPage = $request->get('per_page', 20); // Default 20 items per page
             $page = $request->get('page', 1);
