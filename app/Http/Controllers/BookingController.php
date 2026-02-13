@@ -1127,19 +1127,9 @@ class BookingController extends Controller
                     'admin_user_id' => Auth::id(),
                 ]);
 
-                // Dispatch job to send congratulations email to all owners/co-owners with attachments
-                \Log::info('Dispatching owner handover email job', [
-                    'unit_id' => $unit->id,
-                    'booking_id' => $booking->id
-                ]);
+           
                 SendOwnerHandoverEmailJob::dispatch($unit->id, $booking->id);
 
-                // Dispatch job to send handover completion notification to team
-                // Add 5-second delay to avoid Mailtrap rate limits
-                \Log::info('Dispatching team handover email job', [
-                    'unit_id' => $unit->id,
-                    'booking_id' => $booking->id
-                ]);
                 SendTeamHandoverEmailJob::dispatch($unit->id, $booking->id, Auth::id())
                     ->delay(now()->addSeconds(5));
             }

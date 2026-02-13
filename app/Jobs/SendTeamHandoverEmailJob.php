@@ -83,8 +83,11 @@ class SendTeamHandoverEmailJob implements ShouldQueue
             $ccRecipients = [
                 'inquire@vantageventures.ae',
                 'mtsen@evanlimpenta.com',
+                'glen@evanlimpenta.com',
+                'badawi@evanlimpenta.com',
                 'adham@evanlimpenta.com',
                 'hani@bcoam.com',
+                'info@bcoam.com',
                 'clientsupport@zedcapital.ae',
                 'operations@zedcapital.ae',
                 'president@zedcapital.ae',
