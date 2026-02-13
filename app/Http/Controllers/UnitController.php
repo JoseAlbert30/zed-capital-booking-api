@@ -121,8 +121,12 @@ class UnitController extends Controller
                 }
             }
 
-            // Order by unit number in ascending order
-            $query->orderByRaw('CAST(unit AS UNSIGNED) ASC');
+            // Order by unit number: numbers first, then alphanumeric
+            // First sort by whether it's purely numeric (0 for numeric, 1 for alphanumeric)
+            // Then sort by the actual value
+            $query->orderByRaw("CASE WHEN unit REGEXP '^[0-9]+$' THEN 0 ELSE 1 END ASC")
+                  ->orderByRaw('CAST(unit AS UNSIGNED) ASC')
+                  ->orderBy('unit', 'ASC');
 
             // Pagination support
             $perPage = $request->get('per_page', 20); // Default 20 items per page
