@@ -121,11 +121,23 @@ class UnitController extends Controller
                 }
             }
 
-            $units = $query->get();
+            // Pagination support
+            $perPage = $request->get('per_page', 20); // Default 20 items per page
+            $page = $request->get('page', 1);
+            
+            // Get paginated results
+            $paginatedResults = $query->paginate($perPage, ['*'], 'page', $page);
 
             return response()->json([
                 'success' => true,
-                'units' => $units
+                'units' => $paginatedResults->items(),
+                'pagination' => [
+                    'current_page' => $paginatedResults->currentPage(),
+                    'per_page' => $paginatedResults->perPage(),
+                    'total' => $paginatedResults->total(),
+                    'last_page' => $paginatedResults->lastPage(),
+                    'has_more' => $paginatedResults->hasMorePages()
+                ]
             ], 200);
         } catch (\Exception $e) {
 
@@ -2210,19 +2222,27 @@ class UnitController extends Controller
      */
     private function checkHandoverReady(Unit $unit)
     {
-        // Buyer requirements
-        $buyerRequirements = [
+        // Client requirements: 5 total (6 if mortgage)
+        // 1. 100% SOA receipt (payment_proof)
+        // 2. AC connection
+        // 3. DEWA connection
+        // 4. Service charge acknowledgement signed by buyer (service_charge_ack_buyer)
+        // 5. Finance clearance (finance_clearance)
+        // 6. Bank NOC (bank_noc) - only if has_mortgage
+        $clientRequirements = [
             'payment_proof',
             'ac_connection',
             'dewa_connection',
-            'service_charge_ack_buyer'
+            'service_charge_ack_buyer',
+            'finance_clearance'
         ];
 
         if ($unit->has_mortgage) {
-            $buyerRequirements[] = 'bank_noc';
+            $clientRequirements[] = 'bank_noc';
         }
 
-        // Developer requirements
+        // Developer requirements: 1 total
+        // 1. Developer NOC signed (developer_noc_signed)
         $developerRequirements = [
             'developer_noc_signed'
         ];
@@ -2230,14 +2250,14 @@ class UnitController extends Controller
         // Get all uploaded attachment types
         $uploadedTypes = $unit->attachments->pluck('type')->unique()->toArray();
         
-        // Check if all buyer requirements are met
-        $buyerReady = empty(array_diff($buyerRequirements, $uploadedTypes));
+        // Check if all client requirements are met
+        $clientReady = empty(array_diff($clientRequirements, $uploadedTypes));
         
         // Check if all developer requirements are met
         $developerReady = empty(array_diff($developerRequirements, $uploadedTypes));
         
-        // Handover is ready when both buyer and developer requirements are met
-        $allRequirementsMet = $buyerReady && $developerReady;
+        // Handover is ready when both client and developer requirements are met
+        $allRequirementsMet = $clientReady && $developerReady;
 
         $unit->handover_ready = $allRequirementsMet;
         $unit->save();
