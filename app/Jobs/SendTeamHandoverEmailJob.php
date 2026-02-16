@@ -69,7 +69,7 @@ class SendTeamHandoverEmailJob implements ShouldQueue
                 ];
             })->values()->toArray();
             
-            $completionDateTime = \Carbon\Carbon::parse($booking->handover_completed_at);
+            $completionDateTime = \Carbon\Carbon::parse($booking->handover_completed_at)->timezone('Asia/Dubai');
             $appointmentDate = \Carbon\Carbon::parse($booking->booked_date)->format('l, F j, Y');
             
             // Main recipients
