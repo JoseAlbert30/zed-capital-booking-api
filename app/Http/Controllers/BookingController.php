@@ -568,6 +568,7 @@ class BookingController extends Controller
                     'mtsen@evanlimpenta.com',
                     'adham@evanlimpenta.com',
                     'hani@bcoam.com',
+                    'florian@bcoam.com',
                     'glen@evanlimpenta.com',
                     'badawi@evanlimpenta.com',
                     'info@bcoam.com',
@@ -672,6 +673,7 @@ class BookingController extends Controller
                     'mtsen@evanlimpenta.com',
                     'adham@evanlimpenta.com',
                     'hani@bcoam.com',
+                    'florian@bcoam.com',
                     'glen@evanlimpenta.com',
                     'badawi@evanlimpenta.com',
                     'info@bcoam.com',
@@ -1130,7 +1132,7 @@ class BookingController extends Controller
                     'admin_user_id' => Auth::id(),
                 ]);
 
-           
+
                 SendOwnerHandoverEmailJob::dispatch($unit->id, $booking->id);
 
                 SendTeamHandoverEmailJob::dispatch($unit->id, $booking->id, Auth::id())
