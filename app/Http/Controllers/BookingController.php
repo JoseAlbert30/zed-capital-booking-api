@@ -553,13 +553,18 @@ class BookingController extends Controller
             $newAppointmentDate = Carbon::parse($booking->booked_date)->format('l, F j, Y');
             $newAppointmentTime = Carbon::createFromFormat('H:i', $booking->booked_time)->format('g:i A');
 
+            // Load booking with unit and property for email
+            $booking->load('unit.property');
+
             Mail::send('emails.booking-rescheduled', [
                 'firstName' => $greeting,
                 'oldAppointmentDate' => $oldAppointmentDate,
                 'oldAppointmentTime' => $oldAppointmentTime,
                 'newAppointmentDate' => $newAppointmentDate,
                 'newAppointmentTime' => $newAppointmentTime,
-            ], function ($mail) use ($allOwners) {
+                'unit' => $booking->unit,
+                'property' => $booking->unit->property,
+            ], function ($mail) use ($allOwners, $booking) {
                 foreach ($allOwners as $owner) {
                     $mail->to($owner->email, $owner->full_name);
                 }
@@ -580,7 +585,7 @@ class BookingController extends Controller
                     'president@zedcapital.ae',
                     'wbd@zedcapital.ae'
                 ]);
-                $mail->subject('Handover Appointment Rescheduled - Viera Residences');
+                $mail->subject('Handover Appointment Rescheduled - Unit ' . $booking->unit->unit . ', ' . $booking->unit->property->project_name);
             });
 
             // Add remark for email sent

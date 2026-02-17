@@ -85,7 +85,7 @@
         <div class="content">
             <p>Dear {{ $firstName }},</p>
 
-            <p>This is to inform you that your handover appointment for your unit at Viera Residences has been rescheduled.</p>
+            <p>This is to inform you that your handover appointment for <strong>Unit {{ $unit->unit }}</strong> at {{ $property->project_name }} has been rescheduled.</p>
 
             <h2 style="color: #333; font-size: 18px; margin: 20px 0 10px 0;">Previous Appointment</h2>
             <p><strong>Date:</strong> {{ $oldAppointmentDate }}</p>
