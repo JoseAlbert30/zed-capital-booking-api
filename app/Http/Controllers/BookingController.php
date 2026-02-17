@@ -563,7 +563,7 @@ class BookingController extends Controller
                 foreach ($allOwners as $owner) {
                     $mail->to($owner->email, $owner->full_name);
                 }
-                $mail->cc([
+                $mail->bcc([
                     'inquire@vantageventures.ae',
                     'mtsen@evanlimpenta.com',
                     'adham@evanlimpenta.com',
@@ -667,7 +667,7 @@ class BookingController extends Controller
                 foreach ($allOwners as $owner) {
                     $mail->to($owner->email, $owner->full_name);
                 }
-                $mail->cc([
+                $mail->bcc([
                     'inquire@vantageventures.ae',
                     'mtsen@evanlimpenta.com',
                     'adham@evanlimpenta.com',
