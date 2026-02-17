@@ -3330,7 +3330,7 @@ class UnitController extends Controller
                 // Get attachment statuses
                 $attachments = $unit->attachments;
                 $hasClearance = $attachments->where('type', 'finance_clearance')->isNotEmpty() ? 'Yes' : 'No';
-                $hasSOA = $attachments->where('type', 'soa')->isNotEmpty() ? 'Yes' : 'No';
+                $hasSOA = $attachments->where('type', 'payment_proof')->isNotEmpty() ? 'Yes' : 'No';
                 $hasDEWA = $attachments->where('type', 'dewa_connection')->isNotEmpty() ? 'Yes' : 'No';
                 $hasAC = $attachments->where('type', 'ac_connection')->isNotEmpty() ? 'Yes' : 'No';
                 $hasServiceCharge = $attachments->where('type', 'service_charge_ack_buyer')->isNotEmpty() ? 'Yes' : 'No';
