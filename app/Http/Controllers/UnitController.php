@@ -3286,4 +3286,112 @@ class UnitController extends Controller
             ], 500);
         }
     }
+
+    public function downloadHandoverStatusReport(Request $request)
+    {
+        try {
+            $projectName = $request->input('project');
+            
+            if (!$projectName) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project name is required'
+                ], 400);
+            }
+
+            // Get units for the selected project with all necessary relationships
+            $units = Unit::with([
+                'property',
+                'users',
+                'attachments',
+                'booking'
+            ])
+            ->whereHas('property', function($q) use ($projectName) {
+                $q->where('project_name', $projectName);
+            })
+            ->get();
+
+            if ($units->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No units found for the selected project'
+                ], 404);
+            }
+
+            // Create CSV headers
+            $csv = "Unit Number,Owner Names,Payment Status,Clearance Status,100% SOA Status,DEWA Status,AC Status,Service Charge Acknowledgement Status,Developer NOC Status,Handover Booking Status,Handover Booking Date and Time,Handover Status\n";
+
+            // Generate CSV rows
+            foreach ($units as $unit) {
+                // Get owner names
+                $owners = $unit->users->pluck('full_name')->toArray();
+                $ownerNames = count($owners) > 0 ? implode(' & ', $owners) : 'No Owner';
+
+                // Get attachment statuses
+                $attachments = $unit->attachments;
+                $hasClearance = $attachments->where('type', 'finance_clearance')->isNotEmpty() ? 'Yes' : 'No';
+                $hasSOA = $attachments->where('type', 'soa')->isNotEmpty() ? 'Yes' : 'No';
+                $hasDEWA = $attachments->where('type', 'dewa_connection')->isNotEmpty() ? 'Yes' : 'No';
+                $hasAC = $attachments->where('type', 'ac_connection')->isNotEmpty() ? 'Yes' : 'No';
+                $hasServiceCharge = $attachments->where('type', 'service_charge_ack_buyer')->isNotEmpty() ? 'Yes' : 'No';
+                $hasDeveloperNOC = $attachments->where('type', 'developer_noc_signed')->isNotEmpty() ? 'Yes' : 'No';
+
+                // Payment status
+                $paymentStatus = match($unit->payment_status) {
+                    'fully_paid' => 'Fully Paid',
+                    'partial' => 'Partial',
+                    default => 'Pending'
+                };
+
+                // Booking info
+                $booking = $unit->booking;
+                $bookingStatus = $booking && $booking->booked_date ? 'Booked' : 'Not Booked';
+                
+                $bookingTime = 'N/A';
+                if ($booking && $booking->booked_date && $booking->booked_time) {
+                    $bookedDate = \Carbon\Carbon::parse($booking->booked_date)->format('M d, Y');
+                    $bookingTime = $bookedDate . ' at ' . $booking->booked_time;
+                }
+
+                // Handover status from unit table
+                $handoverStatus = $unit->handover_status ?? 'Pending';
+                $handoverStatus = match($handoverStatus) {
+                    'completed' => 'Completed',
+                    'in_progress' => 'In Progress',
+                    'scheduled' => 'Scheduled',
+                    default => 'Pending'
+                };
+
+                // Add row to CSV
+                $csv .= sprintf(
+                    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                    $unit->unit ?? 'N/A',
+                    str_replace('"', '""', $ownerNames),
+                    $paymentStatus,
+                    $hasClearance,
+                    $hasSOA,
+                    $hasDEWA,
+                    $hasAC,
+                    $hasServiceCharge,
+                    $hasDeveloperNOC,
+                    $bookingStatus,
+                    $bookingTime,
+                    $handoverStatus
+                );
+            }
+
+            $fileName = 'handover-status-' . str_replace(' ', '-', strtolower($projectName)) . '-' . now()->format('Y-m-d') . '.csv';
+
+            return response($csv, 200)
+                ->header('Content-Type', 'text/csv')
+                ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
+                
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate handover status report',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
