@@ -3359,6 +3359,7 @@ class UnitController extends Controller
             ->whereHas('property', function($q) use ($projectName) {
                 $q->where('project_name', $projectName);
             })
+            ->where('unit', 'not like', '%test%')
             ->get();
 
             if ($units->isEmpty()) {
