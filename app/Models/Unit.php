@@ -37,6 +37,8 @@ class Unit extends Model
         'upon_completion_amount',
         'due_after_completion',
         'has_pho',
+        'pdc_in_hand',
+        'pdc_count',
     ];
 
     protected $casts = [

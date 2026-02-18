@@ -294,17 +294,19 @@
             <td class="amount" style="color: #28a745;">AED {{ number_format($total_received, 2, '.', ',') }}</td>
         </tr>
         <tr>
-            <td class="label">AMOUNT PAID TOWARDS PURCHASE PRICE</td>
-            <td class="amount">AED {{ number_format($amount_paid_towards_purchase, 2, '.', ',') }}</td>
-        </tr>
-        <tr>
             <td class="label">AMOUNT PAID TOWARDS 4% DLD + ADMIN FEE</td>
             <td class="amount">AED {{ number_format($amount_paid_towards_dld_admin, 2, '.', ',') }}</td>
         </tr>
         <tr>
-            <td class="label">EXCESS PAYMENT RECEIVED</td>
-            <td class="amount">AED {{ number_format($excess_payment, 2, '.', ',') }}</td>
+            <td class="label">AMOUNT PAID TOWARDS PURCHASE PRICE</td>
+            <td class="amount">AED {{ number_format($amount_paid_towards_purchase, 2, '.', ',') }}</td>
         </tr>
+        @if($excess_payment > 0)
+        <tr>
+            <td class="label" style="color: #17a2b8;"><strong>EXCESS BALANCE</strong></td>
+            <td class="amount" style="color: #17a2b8;"><strong>AED {{ number_format($excess_payment, 2, '.', ',') }}</strong></td>
+        </tr>
+        @endif
     </table>
 
     {{-- Requirements Checklist --}}

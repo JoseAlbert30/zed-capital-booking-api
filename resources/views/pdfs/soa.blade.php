@@ -372,11 +372,24 @@
                 </tr>
                 @endif
                 
+                @if($unit->pdc_in_hand !== null && $unit->pdc_in_hand > 0)
+                <tr>
+                    <td>Total Outstanding Received in PDC (IN HAND)</td>
+                    <td class="text-right amount" style="color: #17a2b8;">{{ number_format($unit->pdc_in_hand, 2) }}</td>
+                </tr>
+                @if($unit->pdc_count !== null)
+                <tr>
+                    <td style="padding-left: 20px; font-size: 8pt; color: #666;">Number of PDCs</td>
+                    <td class="text-right" style="font-size: 8pt; color: #666;">{{ $unit->pdc_count }}</td>
+                </tr>
+                @endif
+                @endif
+                
                 @if($unit->due_after_completion !== null)
                 <tr class="outstanding-row">
                     <td><strong>Due After Completion</strong></td>
-                    <td class="text-right amount" style="color: {{ $unit->due_after_completion > 0 ? '#dc3545' : '#28a745' }};">
-                        {{ number_format($unit->due_after_completion, 2) }}
+                    <td class="text-right amount" style="color: {{ abs($unit->due_after_completion) > 0 ? '#dc3545' : '#28a745' }};">
+                        {{ number_format(abs($unit->due_after_completion), 2) }}
                     </td>
                 </tr>
                 @endif
@@ -397,9 +410,11 @@
     <div class="summary-box">
         <div class="summary-row">
             <div class="summary-label">Payment Status:</div>
-            <div class="summary-amount" style="color: {{ $unit->due_after_completion > 0 ? '#dc3545' : '#28a745' }};">
+            <div class="summary-amount" style="color: {{ abs($unit->due_after_completion) > 0 ? '#dc3545' : '#28a745' }};">
                 @if($unit->due_after_completion > 0)
                     BALANCE DUE AFTER COMPLETION
+                @elseif($unit->due_after_completion < 0 && $unit->pdc_in_hand > 0)
+                    PDC IN HAND
                 @elseif($unit->due_after_completion < 0)
                     OVERPAID
                 @else
@@ -412,7 +427,14 @@
         <div class="summary-row">
             <div class="summary-label">Amount Due After Completion:</div>
             <div class="summary-amount" style="color: #dc3545;">
-                AED {{ number_format($unit->due_after_completion, 2) }}
+                AED {{ number_format(abs($unit->due_after_completion), 2) }}
+            </div>
+        </div>
+        @elseif($unit->due_after_completion < 0 && $unit->pdc_in_hand > 0)
+        <div class="summary-row">
+            <div class="summary-label">PDC Amount:</div>
+            <div class="summary-amount" style="color: #17a2b8;">
+                AED {{ number_format(abs($unit->due_after_completion), 2) }}
             </div>
         </div>
         @elseif($unit->due_after_completion < 0)
@@ -464,6 +486,11 @@
             <li>All amounts are in UAE Dirhams (AED)</li>
             <li>This is an automatically generated statement</li>
             <li>Please retain this document for your records</li>
+            @if($unit->has_pho == 1 || $unit->has_pho === true)
+                @if($unit->pdc_in_hand !== null && $unit->pdc_in_hand > 0)
+                <li><strong>PDCs (Post-Dated Cheques) are shown for transparency but do not reduce the outstanding balance</strong></li>
+                @endif
+            @endif
             @if($unit->outstanding_amount > 0)
             <li><strong>Outstanding balance must be cleared before handover</strong></li>
             @endif
