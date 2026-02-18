@@ -12,7 +12,6 @@ class PropertySeeder extends Seeder
      */
     public function run(): void
     {
-        // Create Viera Residences property
         Property::updateOrCreate(
             ['project_name' => 'Viera Residences'],
             [
