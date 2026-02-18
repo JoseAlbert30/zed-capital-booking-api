@@ -812,7 +812,7 @@ class UnitController extends Controller
                     
                     while (($row = fgetcsv($handle)) !== false) {
                         try {
-                            $expectedColumns = $withPho ? 9 : 8;
+                            $expectedColumns = $withPho ? 10 : 8;
                             if (count($row) < $expectedColumns) {
                                 $skipped[] = "Row skipped: Invalid format (expected {$expectedColumns} columns)";
                                 continue;
@@ -828,12 +828,21 @@ class UnitController extends Controller
                             
                             // PHO columns
                             $uponCompletionAmount = null;
+                            $pdcInHand = null;
+                            $pdcCount = null;
                             $dueAfterCompletion = null;
                             $outstandingAmount = null;
                             
                             if ($withPho) {
                                 $uponCompletionAmount = $this->parseCurrencyValue($row[7]);
-                                $dueAfterCompletion = $this->parseCurrencyValue($row[8]);
+                                $pdcInHand = $this->parseCurrencyValue($row[8]);
+                                $pdcCount = !empty($row[9]) ? intval($row[9]) : null;
+                                
+                                // Calculate due after completion: upon_completion - pdc_in_hand
+                                $dueAfterCompletion = $uponCompletionAmount;
+                                if ($pdcInHand !== null) {
+                                    $dueAfterCompletion = $uponCompletionAmount - $pdcInHand;
+                                }
                             } else {
                                 $outstandingAmount = $this->parseCurrencyValue($row[7]);
                             }
@@ -865,11 +874,15 @@ class UnitController extends Controller
                             
                             if ($withPho) {
                                 $updateData['upon_completion_amount'] = $uponCompletionAmount;
+                                $updateData['pdc_in_hand'] = $pdcInHand;
+                                $updateData['pdc_count'] = $pdcCount;
                                 $updateData['due_after_completion'] = $dueAfterCompletion;
                                 $updateData['outstanding_amount'] = null;
                             } else {
                                 $updateData['outstanding_amount'] = $outstandingAmount;
                                 $updateData['upon_completion_amount'] = null;
+                                $updateData['pdc_in_hand'] = null;
+                                $updateData['pdc_count'] = null;
                                 $updateData['due_after_completion'] = null;
                             }
                             
@@ -899,7 +912,7 @@ class UnitController extends Controller
                     
                     foreach ($rows as $row) {
                         try {
-                            $expectedColumns = $withPho ? 9 : 8;
+                            $expectedColumns = $withPho ? 10 : 8;
                             if (count($row) < $expectedColumns) {
                                 $skipped[] = "Row skipped: Invalid format (expected {$expectedColumns} columns)";
                                 continue;
@@ -915,12 +928,21 @@ class UnitController extends Controller
                             
                             // PHO columns
                             $uponCompletionAmount = null;
+                            $pdcInHand = null;
+                            $pdcCount = null;
                             $dueAfterCompletion = null;
                             $outstandingAmount = null;
                             
                             if ($withPho) {
                                 $uponCompletionAmount = $this->parseCurrencyValue($row[7]);
-                                $dueAfterCompletion = $this->parseCurrencyValue($row[8]);
+                                $pdcInHand = $this->parseCurrencyValue($row[8]);
+                                $pdcCount = !empty($row[9]) ? intval($row[9]) : null;
+                                
+                                // Calculate due after completion: upon_completion - pdc_in_hand
+                                $dueAfterCompletion = $uponCompletionAmount;
+                                if ($pdcInHand !== null) {
+                                    $dueAfterCompletion = $uponCompletionAmount - $pdcInHand;
+                                }
                             } else {
                                 $outstandingAmount = $this->parseCurrencyValue($row[7]);
                             }
@@ -952,11 +974,15 @@ class UnitController extends Controller
                             
                             if ($withPho) {
                                 $updateData['upon_completion_amount'] = $uponCompletionAmount;
+                                $updateData['pdc_in_hand'] = $pdcInHand;
+                                $updateData['pdc_count'] = $pdcCount;
                                 $updateData['due_after_completion'] = $dueAfterCompletion;
                                 $updateData['outstanding_amount'] = null;
                             } else {
                                 $updateData['outstanding_amount'] = $outstandingAmount;
                                 $updateData['upon_completion_amount'] = null;
+                                $updateData['pdc_in_hand'] = null;
+                                $updateData['pdc_count'] = null;
                                 $updateData['due_after_completion'] = null;
                             }
                             
@@ -2509,21 +2535,23 @@ class UnitController extends Controller
             $totalReceived = $unit->total_amount_paid ?? 0;
             $hasPHO = $unit->has_pho ?? false;
             
-            // For PHO units, calculate proper values based on purchase price and DLD+admin
+            // New payment allocation logic: Pay DLD + Admin first, then Purchase Price
             if ($hasPHO) {
-                // If total_amount is 0 or not set, calculate it
-                if ($totalAmount == 0) {
-                    $totalAmount = $totalUnitPrice + $totalDldAndAdmin;
-                }
-                // For PHO units, show full amounts as paid (don't override totalReceived from database)
-                $amountPaidTowardsPurchase = $totalUnitPrice;
-                $amountPaidTowardsDldAdmin = $totalDldAndAdmin;
+                // For PHO units, show what's paid so far
+                // First allocate to DLD + Admin
+                $amountPaidTowardsDldAdmin = min($totalReceived, $totalDldAndAdmin);
+                // Remaining goes to purchase price
+                $amountPaidTowardsPurchase = max(0, $totalReceived - $totalDldAndAdmin);
+                // Calculate excess (if paid more than total amount)
                 $excessPayment = max(0, $totalReceived - $totalAmount);
-                $percentageCompleted = 100;
+                $percentageCompleted = $totalUnitPrice > 0 ? ($amountPaidTowardsPurchase / $totalUnitPrice * 100) : 0;
             } else {
-                $amountPaidTowardsPurchase = min($totalReceived, $totalUnitPrice);
-                // Calculate amount paid towards DLD + Admin (after purchase price is covered)
-                $amountPaidTowardsDldAdmin = max(0, min($totalReceived - $totalUnitPrice, $totalDldAndAdmin));
+                // For non-PHO units, use same logic
+                // First allocate to DLD + Admin
+                $amountPaidTowardsDldAdmin = min($totalReceived, $totalDldAndAdmin);
+                // Remaining goes to purchase price
+                $amountPaidTowardsPurchase = max(0, $totalReceived - $totalDldAndAdmin);
+                // Calculate excess (if paid more than total amount)
                 $excessPayment = max(0, $totalReceived - $totalAmount);
                 $percentageCompleted = $totalUnitPrice > 0 ? ($amountPaidTowardsPurchase / $totalUnitPrice * 100) : 0;
             }
@@ -3131,15 +3159,37 @@ class UnitController extends Controller
      */
     private function parseCurrencyValue($value)
     {
-        if (empty($value) || trim($value) === '-' || trim($value) === '') {
+        // Check for truly empty values
+        if ($value === null || $value === '') {
             return null;
         }
         
-        // Remove quotes, commas, and spaces
-        $cleanValue = str_replace(['"', ',', ' ', "'"], '', trim($value));
+        $trimmed = trim($value);
         
-        // Convert to float
-        return is_numeric($cleanValue) ? (float) $cleanValue : null;
+        // Check for placeholder values
+        if ($trimmed === '-' || $trimmed === 'N/A') {
+            return null;
+        }
+        
+        // Remove BOM, quotes, commas, spaces, and other formatting
+        $cleanValue = str_replace(["\xEF\xBB\xBF", '"', ',', ' ', "'", "\r", "\n", "\t"], '', $trimmed);
+        
+        // Now check if it's empty after cleaning
+        if ($cleanValue === '') {
+            return null;
+        }
+        
+        // Convert to float, ensuring we only get numeric values
+        if (is_numeric($cleanValue)) {
+            $floatValue = (float) $cleanValue;
+            // Sanity check - if value is astronomically high, log it
+            if ($floatValue > 999999999) {
+                \Log::warning("Parsed extremely high currency value: {$floatValue} from input: {$value}");
+            }
+            return $floatValue;
+        }
+        
+        return null;
     }
 
     /**
