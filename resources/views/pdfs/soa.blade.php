@@ -497,9 +497,6 @@
                 <li><strong>PDCs (Post-Dated Cheques) are shown for transparency but do not reduce the outstanding balance</strong></li>
                 @endif
             @endif
-            @if($unit->outstanding_amount > 0)
-            <li><strong>Outstanding balance must be cleared before handover</strong></li>
-            @endif
         </ul>
     </div>
 
@@ -507,6 +504,11 @@
         <p style="margin: 0; line-height: 1.4;">
             <strong>Disclaimer:</strong> This Statement of Account does not reflect applicable late payment fees. If any, the amount will be communicated upon the full settlement and clearance of all outstanding balances and according to the SPA terms and conditions.
         </p>
+        @if($unit->has_pho == 1 || $unit->has_pho === true)
+        <p style="margin: 8px 0 0 0; line-height: 1.4;">
+            This document reflects payments received as per the approved Post-Handover Payment Plan dates. Post-dated cheques (PDCs) for future payments are subject to bank clearance and do not constitute confirmed funds until successfully realized.
+        </p>
+        @endif
     </div>
 
 </body>
