@@ -329,7 +329,7 @@
             </tr>
             <tr>
                 <td class="requirement-label">3. 100% PURCHASE PRICE PAID</td>
-                <td class="requirement-value {{ strtolower($requirement3) }}">{{ $requirement3 }}</td>
+                <td class="requirement-value {{ strtolower(($unit->has_pho ?? false) ? 'pho' : $requirement3) }}">{{ ($unit->has_pho ?? false) ? 'PHO' : $requirement3 }}</td>
             </tr>
             <tr>
                 <td class="requirement-label">4. LATE PAYMENT CHARGES ON INSTALLMENTS PAID (IF ANY)</td>
