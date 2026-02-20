@@ -6,6 +6,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\UnitController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\SalesOfferController;
+use App\Http\Controllers\FinancePOPController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -87,6 +88,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('units')->group(function () {
         Route::get('/', [UnitController::class, 'index']);
+        Route::get('/by-project', [UnitController::class, 'getUnitsByProject']);
         Route::post('/', [UnitController::class, 'store']);
         Route::post('/bulk', [UnitController::class, 'bulkUpload']);
         Route::post('/bulk-upload-soa', [UnitController::class, 'bulkUploadSOA']);
@@ -154,6 +156,14 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json(\App\Models\Property::all());
     });
 
+    // Finance POP Routes
+    Route::prefix('finance/pops')->group(function () {
+        Route::get('/', [FinancePOPController::class, 'index']);
+        Route::post('/', [FinancePOPController::class, 'store']);
+        Route::put('/{id}', [FinancePOPController::class, 'update']);
+        Route::delete('/{id}', [FinancePOPController::class, 'destroy']);
+        Route::post('/{id}/notify', [FinancePOPController::class, 'sendNotification']);
+    });
 
     Route::get('/health', function (Request $request) {
         return response()->json(['status' => 'ok', 'user' => $request->user()]);

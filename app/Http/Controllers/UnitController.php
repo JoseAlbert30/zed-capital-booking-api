@@ -157,6 +157,47 @@ class UnitController extends Controller
     }
 
     /**
+     * Get units by project name for dropdown selection.
+     */
+    public function getUnitsByProject(Request $request)
+    {
+        try {
+            $projectName = $request->query('project');
+            
+            if (!$projectName) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project name is required',
+                ], 400);
+            }
+
+            $units = Unit::whereHas('property', function ($query) use ($projectName) {
+                $query->where('project_name', $projectName);
+            })
+            ->orderByRaw("CASE WHEN unit REGEXP '^[0-9]+$' THEN 0 ELSE 1 END ASC")
+            ->orderByRaw('CAST(unit AS UNSIGNED) ASC')
+            ->orderBy('unit', 'ASC')
+            ->select('id', 'unit', 'property_id')
+            ->get();
+
+            return response()->json([
+                'success' => true,
+                'units' => $units->map(function ($unit) {
+                    return [
+                        'id' => $unit->id,
+                        'unit_number' => $unit->unit,
+                    ];
+                }),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch units: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Get a single unit by ID with all related data.
      */
     public function show($id)
