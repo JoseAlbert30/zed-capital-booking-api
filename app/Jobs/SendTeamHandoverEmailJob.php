@@ -56,31 +56,32 @@ class SendTeamHandoverEmailJob implements ShouldQueue
             $unit = Unit::with(['users', 'property'])->findOrFail($this->unitId);
             $booking = Booking::with('user')->findOrFail($this->bookingId);
             $completedByUser = \App\Models\User::findOrFail($this->completedByUserId);
-            
+
             $allOwners = $unit->users;
-            
+
             // Get co-owners information
-            $coOwners = $allOwners->filter(function($owner) use ($booking) {
+            $coOwners = $allOwners->filter(function ($owner) use ($booking) {
                 return $owner->id !== $booking->user_id;
-            })->map(function($owner) {
+            })->map(function ($owner) {
                 return [
                     'name' => $owner->full_name,
                     'email' => $owner->email,
                 ];
             })->values()->toArray();
-            
+
             $completionDateTime = \Carbon\Carbon::parse($booking->handover_completed_at)->timezone('Asia/Dubai');
             $appointmentDate = \Carbon\Carbon::parse($booking->booked_date)->format('l, F j, Y');
-            
+
             // Main recipients
             $mainRecipients = [
                 'vantage@zedcapital.ae',    // Zed
                 'docs@zedcapital.ae',        // Devi
                 'admin@zedcapital.ae'        // Mayada
             ];
-            
+
             // CC recipients (rest of the team)
             $ccRecipients = [
+                'Odai@evanlimpenta.com',
                 'inquire@vantageventures.ae',
                 'mtsen@evanlimpenta.com',
                 'glen@evanlimpenta.com',
@@ -93,14 +94,14 @@ class SendTeamHandoverEmailJob implements ShouldQueue
                 'president@zedcapital.ae',
                 'wbd@zedcapital.ae'
             ];
-            
+
             Log::info('Sending handover completion email to team', [
                 'unit_id' => $unit->id,
                 'booking_id' => $booking->id,
                 'main_recipients' => $mainRecipients,
                 'cc_recipients' => $ccRecipients
             ]);
-            
+
             Mail::send('emails.admin-handover-completed', [
                 'propertyName' => $unit->property->project_name,
                 'unitNumber' => $unit->unit,
@@ -116,12 +117,12 @@ class SendTeamHandoverEmailJob implements ShouldQueue
             ], function ($mail) use ($booking, $unit, $mainRecipients, $ccRecipients) {
                 // Send to main recipients
                 $mail->to($mainRecipients);
-                
+
                 // CC the rest of the team
                 $mail->cc($ccRecipients);
-                
+
                 $mail->subject('Handover Completed - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
-                
+
                 // Attach declaration PDF
                 if ($booking->handover_declaration) {
                     $declarationPath = Storage::disk('public')->path($booking->handover_declaration);
@@ -132,7 +133,7 @@ class SendTeamHandoverEmailJob implements ShouldQueue
                         ]);
                     }
                 }
-                
+
                 // Attach checklist PDF
                 if ($booking->handover_checklist) {
                     $checklistPath = Storage::disk('public')->path($booking->handover_checklist);
@@ -143,7 +144,7 @@ class SendTeamHandoverEmailJob implements ShouldQueue
                         ]);
                     }
                 }
-                
+
                 // Attach handover photo
                 if ($booking->handover_photo) {
                     $photoPath = Storage::disk('public')->path($booking->handover_photo);
@@ -173,7 +174,6 @@ class SendTeamHandoverEmailJob implements ShouldQueue
                 'type' => 'email_sent',
                 'admin_user_id' => $this->completedByUserId,
             ]);
-
         } catch (\Exception $e) {
             Log::error('Failed to send handover completion email to team', [
                 'error' => $e->getMessage(),
@@ -181,7 +181,7 @@ class SendTeamHandoverEmailJob implements ShouldQueue
                 'unit_id' => $this->unitId,
                 'booking_id' => $this->bookingId
             ]);
-            
+
             // Re-throw the exception so the job can be retried
             throw $e;
         }
