@@ -18,6 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);
+        
+        // Register custom middleware alias
+        $middleware->alias([
+            'auth.developer_or_admin' => \App\Http\Middleware\AuthenticateDeveloperOrAdmin::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -156,20 +156,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/properties', function () {
         return response()->json(\App\Models\Property::all());
     });
+});
 
-    // Finance POP Routes
-    Route::prefix('finance')->group(function () {
-        Route::get('/pops', [FinancePOPController::class, 'index']);
-        Route::post('/pops', [FinancePOPController::class, 'store']);
-        Route::put('/pops/{id}', [FinancePOPController::class, 'update']);
-        Route::delete('/pops/{id}', [FinancePOPController::class, 'destroy']);
-        Route::post('/pops/{id}/notify', [FinancePOPController::class, 'sendNotification']);
-        
-        // Project settings
-        Route::get('/projects/{projectName}/settings', [FinancePOPController::class, 'getProjectSettings']);
-        Route::put('/projects/{projectName}/settings', [FinancePOPController::class, 'updateProjectSettings']);
-    });
+// Finance POP Routes (accessible by both admins and developers via custom middleware)
+Route::middleware(['auth.developer_or_admin'])->prefix('finance')->group(function () {
+    Route::get('/pops', [FinancePOPController::class, 'index']);
+    Route::get('/projects/{projectName}/settings', [FinancePOPController::class, 'getProjectSettings']);
+});
 
+// Units endpoint for project filtering (accessible by both admins and developers)
+Route::middleware(['auth.developer_or_admin'])->get('/units/by-project', [UnitController::class, 'getUnitsByProject']);
+
+// Protected Finance Routes (admin only)
+Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
+    Route::post('/pops', [FinancePOPController::class, 'store']);
+    Route::put('/pops/{id}', [FinancePOPController::class, 'update']);
+    Route::delete('/pops/{id}', [FinancePOPController::class, 'destroy']);
+    Route::post('/pops/{id}/notify', [FinancePOPController::class, 'sendNotification']);
+    Route::put('/projects/{projectName}/settings', [FinancePOPController::class, 'updateProjectSettings']);
+});
+
+Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/health', function (Request $request) {
         return response()->json(['status' => 'ok', 'user' => $request->user()]);
     });

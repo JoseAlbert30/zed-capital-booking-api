@@ -21,6 +21,14 @@ class FinancePOPController extends Controller
     {
         $project = $request->query('project');
 
+        // Check authentication type from middleware
+        $authType = $request->attributes->get('auth_type');
+        
+        if ($authType === 'developer') {
+            // Developer is authenticated via magic link - restrict to their project
+            $project = $request->attributes->get('developer_project');
+        }
+
         $query = FinancePOP::with(['creator:id,full_name,email', 'unit'])
             ->orderBy('created_at', 'desc');
 
