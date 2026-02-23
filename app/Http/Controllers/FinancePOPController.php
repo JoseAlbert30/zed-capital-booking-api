@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\FinancePOP;
+use App\Models\DeveloperMagicLink;
+use App\Models\Property;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\POPNotificationMail;
+use App\Mail\POPDeveloperNotification;
 
 class FinancePOPController extends Controller
 {
@@ -124,11 +127,18 @@ class FinancePOPController extends Controller
                 'created_by' => auth()->id(),
             ]);
 
+            // Handle sending email to developer if requested
+            if ($request->input('send_to_developer') === 'true') {
+                $this->sendToDeveloper($pop);
+            }
+
             $pop->load('creator:id,full_name,email', 'unit');
 
             return response()->json([
                 'success' => true,
-                'message' => 'POP created successfully',
+                'message' => $request->input('send_to_developer') === 'true' 
+                    ? 'POP created and notification sent to developer' 
+                    : 'POP created successfully',
                 'pop' => [
                     'id' => $pop->id,
                     'popNumber' => $pop->pop_number,
@@ -280,16 +290,8 @@ class FinancePOPController extends Controller
         }
 
         try {
-            // Get developer email from config or env
-            $developerEmail = env('DEVELOPER_EMAIL', 'developer@example.com');
-
-            // Send email notification
-            // Mail::to($developerEmail)->send(new POPNotificationMail($pop));
-
-            // Update notification status
-            $pop->notification_sent = true;
-            $pop->notification_sent_at = now();
-            $pop->save();
+            // Use the sendToDeveloper method
+            $this->sendToDeveloper($pop);
 
             return response()->json([
                 'success' => true,
@@ -300,6 +302,127 @@ class FinancePOPController extends Controller
                 'success' => false,
                 'message' => 'Failed to send notification: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    /**
+     * Get project settings
+     */
+    public function getProjectSettings(Request $request, $projectName)
+    {
+        try {
+            $property = Property::where('project_name', $projectName)->first();
+
+            if (!$property) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project not found',
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'developer_email' => $property->developer_email,
+                'developer_name' => $property->developer_name,
+                'cc_emails' => $property->cc_emails,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch settings: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update project settings
+     */
+    public function updateProjectSettings(Request $request, $projectName)
+    {
+        $validator = Validator::make($request->all(), [
+            'developer_email' => 'nullable|email',
+            'developer_name' => 'nullable|string',
+            'cc_emails' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $property = Property::where('project_name', $projectName)->first();
+
+            if (!$property) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project not found',
+                ], 404);
+            }
+
+            $property->developer_email = $request->input('developer_email');
+            $property->developer_name = $request->input('developer_name');
+            $property->cc_emails = $request->input('cc_emails');
+            $property->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Settings updated successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update settings: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Send POP notification to developer with magic link
+     */
+    private function sendToDeveloper(FinancePOP $pop)
+    {
+        try {
+            // Get property/project details to find developer email
+            $property = Property::where('project_name', $pop->project_name)->first();
+            
+            if (!$property || !$property->developer_email) {
+                \Log::warning("No developer email found for project: {$pop->project_name}");
+                return;
+            }
+
+            // Generate or get existing magic link for this developer/project
+            $magicLink = DeveloperMagicLink::where('project_name', $pop->project_name)
+                ->where('developer_email', $property->developer_email)
+                ->where('is_active', true)
+                ->where('expires_at', '>', now())
+                ->first();
+
+            if (!$magicLink) {
+                $magicLink = DeveloperMagicLink::generate(
+                    $pop->project_name,
+                    $property->developer_email,
+                    $property->developer_name ?? null,
+                    90 // 90 days validity
+                );
+            }
+
+            // Send email
+            Mail::to($property->developer_email)->send(
+                new POPDeveloperNotification($pop, $magicLink, $property->cc_emails)
+            );
+
+            // Update POP notification status
+            $pop->notification_sent = true;
+            $pop->notification_sent_at = now();
+            $pop->save();
+
+        } catch (\Exception $e) {
+            \Log::error("Failed to send POP to developer: " . $e->getMessage());
+            // Don't throw - just log the error so POP creation still succeeds
         }
     }
 }

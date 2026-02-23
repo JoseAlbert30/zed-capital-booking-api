@@ -13,6 +13,9 @@ class Property extends Model
     protected $fillable = [
         'project_name',
         'location',
+        'developer_email',
+        'developer_name',
+        'cc_emails',
         'handover_checklist_template',
         'declaration_template',
     ];

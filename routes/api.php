@@ -7,6 +7,7 @@ use App\Http\Controllers\UnitController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\SalesOfferController;
 use App\Http\Controllers\FinancePOPController;
+use App\Http\Controllers\DeveloperPortalController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -157,17 +158,31 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Finance POP Routes
-    Route::prefix('finance/pops')->group(function () {
-        Route::get('/', [FinancePOPController::class, 'index']);
-        Route::post('/', [FinancePOPController::class, 'store']);
-        Route::put('/{id}', [FinancePOPController::class, 'update']);
-        Route::delete('/{id}', [FinancePOPController::class, 'destroy']);
-        Route::post('/{id}/notify', [FinancePOPController::class, 'sendNotification']);
+    Route::prefix('finance')->group(function () {
+        Route::get('/pops', [FinancePOPController::class, 'index']);
+        Route::post('/pops', [FinancePOPController::class, 'store']);
+        Route::put('/pops/{id}', [FinancePOPController::class, 'update']);
+        Route::delete('/pops/{id}', [FinancePOPController::class, 'destroy']);
+        Route::post('/pops/{id}/notify', [FinancePOPController::class, 'sendNotification']);
+        
+        // Project settings
+        Route::get('/projects/{projectName}/settings', [FinancePOPController::class, 'getProjectSettings']);
+        Route::put('/projects/{projectName}/settings', [FinancePOPController::class, 'updateProjectSettings']);
     });
 
     Route::get('/health', function (Request $request) {
         return response()->json(['status' => 'ok', 'user' => $request->user()]);
     });
+});
+
+// Developer Portal Routes (no auth required, uses magic link token)
+Route::prefix('developer')->group(function () {
+    Route::get('/verify', [DeveloperPortalController::class, 'verify']);
+    Route::post('/set-password', [DeveloperPortalController::class, 'setPassword']);
+    Route::post('/login', [DeveloperPortalController::class, 'login']);
+    Route::get('/pops', [DeveloperPortalController::class, 'getPOPs']);
+    Route::post('/pops/{popId}/receipt', [DeveloperPortalController::class, 'uploadReceipt']);
+    Route::get('/pops/{popId}/download', [DeveloperPortalController::class, 'downloadPOP']);
 });
 
 Route::get('/health', function () {
