@@ -183,7 +183,11 @@ class BookingController extends Controller
         }
 
         // Check if unit is eligible for booking
-        if ($unit->payment_status !== 'fully_paid' || !$unit->handover_ready) {
+        // PHO units can book with partial payment if handover_ready
+        // Non-PHO units need fully_paid + handover_ready
+        $isEligible = $unit->handover_ready && ($unit->has_pho || $unit->payment_status === 'fully_paid');
+        
+        if (!$isEligible) {
             return response()->json(['message' => 'This unit is not eligible for booking yet. Payment must be completed and handover requirements fulfilled.'], 403);
         }
 
