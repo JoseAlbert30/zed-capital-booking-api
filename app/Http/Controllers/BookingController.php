@@ -124,11 +124,12 @@ class BookingController extends Controller
             ->where('handover_ready', true)
             ->get();
 
-        // Add booking status for each unit
+        // Add booking status and has_pho for each unit
         $units = $units->map(function ($unit) {
             $existingBooking = $unit->bookings->first();
             $unit->has_booking = $existingBooking ? true : false;
             $unit->booking = $existingBooking;
+            $unit->has_pho = $unit->has_pho ?? false; // Explicitly include has_pho
             unset($unit->bookings); // Remove the collection, keep only the single booking
             return $unit;
         });
