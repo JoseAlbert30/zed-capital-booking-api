@@ -47,6 +47,8 @@ class AuthenticateDeveloperOrAdmin
             $request->attributes->set('auth_type', 'developer');
             $request->attributes->set('developer_magic_link', $magicLink);
             $request->attributes->set('developer_project', $magicLink->project_name);
+            $request->attributes->set('developer_name', $magicLink->developer_name);
+            $request->attributes->set('developer_email', $magicLink->developer_email);
             return $next($request);
         }
 

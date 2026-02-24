@@ -7,6 +7,8 @@ use App\Http\Controllers\UnitController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\SalesOfferController;
 use App\Http\Controllers\FinancePOPController;
+use App\Http\Controllers\FinancePenaltyController;
+use App\Http\Controllers\FinanceNOCController;
 use App\Http\Controllers\DeveloperPortalController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -162,6 +164,19 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware(['auth.developer_or_admin'])->prefix('finance')->group(function () {
     Route::get('/pops', [FinancePOPController::class, 'index']);
     Route::get('/projects/{projectName}/settings', [FinancePOPController::class, 'getProjectSettings']);
+    Route::post('/pops/{id}/upload-receipt', [FinancePOPController::class, 'uploadReceipt']);
+    Route::post('/pops/{id}/upload-soa', [FinancePOPController::class, 'uploadSOA']);
+    Route::post('/pops/{id}/mark-as-viewed', [FinancePOPController::class, 'markAsViewed']);
+    
+    // Penalty routes (accessible by both admins and developers)
+    Route::get('/penalties', [FinancePenaltyController::class, 'index']);
+    Route::post('/penalties/{id}/upload-document', [FinancePenaltyController::class, 'uploadDocument']);
+    Route::post('/penalties/{id}/mark-as-viewed', [FinancePenaltyController::class, 'markAsViewed']);
+    
+    // NOC routes (accessible by both admins and developers)
+    Route::get('/nocs', [FinanceNOCController::class, 'index']);
+    Route::post('/nocs/{id}/upload-document', [FinanceNOCController::class, 'uploadDocument']);
+    Route::post('/nocs/{id}/mark-as-viewed', [FinanceNOCController::class, 'markAsViewed']);
 });
 
 // Units endpoint for project filtering (accessible by both admins and developers)
@@ -173,7 +188,19 @@ Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
     Route::put('/pops/{id}', [FinancePOPController::class, 'update']);
     Route::delete('/pops/{id}', [FinancePOPController::class, 'destroy']);
     Route::post('/pops/{id}/notify', [FinancePOPController::class, 'sendNotification']);
+    Route::post('/pops/{id}/request-soa', [FinancePOPController::class, 'requestSOA']);
+    Route::post('/pops/{id}/resend-soa', [FinancePOPController::class, 'resendSOARequest']);
     Route::put('/projects/{projectName}/settings', [FinancePOPController::class, 'updateProjectSettings']);
+    
+    
+    // NOC admin routes
+    Route::post('/nocs', [FinanceNOCController::class, 'store']);
+    Route::delete('/nocs/{id}', [FinanceNOCController::class, 'destroy']);
+    Route::post('/nocs/{id}/resend-notification', [FinanceNOCController::class, 'resendNotification']);
+    // Penalty admin routes
+    Route::post('/penalties', [FinancePenaltyController::class, 'store']);
+    Route::delete('/penalties/{id}', [FinancePenaltyController::class, 'destroy']);
+    Route::post('/penalties/{id}/resend-notification', [FinancePenaltyController::class, 'resendNotification']);
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {

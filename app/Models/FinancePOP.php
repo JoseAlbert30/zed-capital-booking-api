@@ -22,14 +22,18 @@ class FinancePOP extends Model
         'attachment_name',
         'notification_sent',
         'notification_sent_at',
+        'viewed_by_developer',
+        'viewed_at',
         'receipt_path',
         'receipt_name',
         'receipt_uploaded_at',
+        'receipt_uploaded_by',
         'soa_requested',
         'soa_requested_at',
         'soa_docs_path',
         'soa_docs_name',
         'soa_docs_uploaded_at',
+        'soa_uploaded_by',
         'soa_sent_to_buyer',
         'soa_sent_to_buyer_at',
         'created_by',
@@ -39,6 +43,8 @@ class FinancePOP extends Model
         'amount' => 'decimal:2',
         'notification_sent' => 'boolean',
         'notification_sent_at' => 'datetime',
+        'viewed_by_developer' => 'boolean',
+        'viewed_at' => 'datetime',
         'receipt_uploaded_at' => 'datetime',
         'soa_requested' => 'boolean',
         'soa_requested_at' => 'datetime',
@@ -72,10 +78,7 @@ class FinancePOP extends Model
      */
     public function getAttachmentUrlAttribute()
     {
-        if ($this->attachment_path) {
-            return Storage::url($this->attachment_path);
-        }
-        return null;
+        return $this->attachment_path;
     }
 
     /**
@@ -83,7 +86,7 @@ class FinancePOP extends Model
      */
     public function getReceiptUrlAttribute()
     {
-        return $this->receipt_path ? Storage::url($this->receipt_path) : null;
+        return $this->receipt_path;
     }
 
     /**
@@ -91,7 +94,7 @@ class FinancePOP extends Model
      */
     public function getSoaDocsUrlAttribute()
     {
-        return $this->soa_docs_path ? Storage::url($this->soa_docs_path) : null;
+        return $this->soa_docs_path;
     }
 
     /**
@@ -104,8 +107,8 @@ class FinancePOP extends Model
         if ($this->created_at) {
             $timeline[] = [
                 'action' => 'POP Uploaded',
-                'date' => $this->created_at->format('Y-m-d'),
-                'time' => $this->created_at->format('H:i:s'),
+                'date' => $this->created_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->created_at->timezone('Asia/Dubai')->format('H:i:s'),
                 'user' => $this->creator ? $this->creator->full_name : 'System',
             ];
         }
@@ -113,44 +116,53 @@ class FinancePOP extends Model
         if ($this->notification_sent_at) {
             $timeline[] = [
                 'action' => 'Sent to Developer',
-                'date' => $this->notification_sent_at->format('Y-m-d'),
-                'time' => $this->notification_sent_at->format('H:i:s'),
+                'date' => $this->notification_sent_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->notification_sent_at->timezone('Asia/Dubai')->format('H:i:s'),
                 'user' => $this->creator ? $this->creator->full_name : 'System',
+            ];
+        }
+
+        if ($this->viewed_at) {
+            $timeline[] = [
+                'action' => 'Viewed by Developer',
+                'date' => $this->viewed_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->viewed_at->timezone('Asia/Dubai')->format('H:i:s'),
+                'user' => 'Developer',
             ];
         }
 
         if ($this->receipt_uploaded_at) {
             $timeline[] = [
                 'action' => 'Receipt Uploaded',
-                'date' => $this->receipt_uploaded_at->format('Y-m-d'),
-                'time' => $this->receipt_uploaded_at->format('H:i:s'),
-                'user' => 'Developer',
+                'date' => $this->receipt_uploaded_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->receipt_uploaded_at->timezone('Asia/Dubai')->format('H:i:s'),
+                'user' => $this->receipt_uploaded_by ?: 'Developer',
             ];
         }
 
         if ($this->soa_requested_at) {
             $timeline[] = [
-                'action' => 'SOA Requested',
-                'date' => $this->soa_requested_at->format('Y-m-d'),
-                'time' => $this->soa_requested_at->format('H:i:s'),
-                'user' => $this->creator ? $this->creator->full_name : 'System',
+                'action' => 'Requested SOA from Developer',
+                'date' => $this->soa_requested_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->soa_requested_at->timezone('Asia/Dubai')->format('H:i:s'),
+                'user' => $this->creator ? $this->creator->full_name : 'Admin',
             ];
         }
 
         if ($this->soa_docs_uploaded_at) {
             $timeline[] = [
                 'action' => 'SOA Docs Uploaded',
-                'date' => $this->soa_docs_uploaded_at->format('Y-m-d'),
-                'time' => $this->soa_docs_uploaded_at->format('H:i:s'),
-                'user' => 'Developer',
+                'date' => $this->soa_docs_uploaded_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->soa_docs_uploaded_at->timezone('Asia/Dubai')->format('H:i:s'),
+                'user' => $this->soa_uploaded_by ?: 'Developer',
             ];
         }
 
         if ($this->soa_sent_to_buyer_at) {
             $timeline[] = [
                 'action' => 'SOA Sent to Buyer',
-                'date' => $this->soa_sent_to_buyer_at->format('Y-m-d'),
-                'time' => $this->soa_sent_to_buyer_at->format('H:i:s'),
+                'date' => $this->soa_sent_to_buyer_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->soa_sent_to_buyer_at->timezone('Asia/Dubai')->format('H:i:s'),
                 'user' => $this->creator ? $this->creator->full_name : 'System',
             ];
         }
