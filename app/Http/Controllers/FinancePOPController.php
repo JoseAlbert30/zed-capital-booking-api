@@ -46,16 +46,13 @@ class FinancePOPController extends Controller
                     'popNumber' => $pop->pop_number,
                     'unitNumber' => $pop->unit_number,
                     'unitId' => $pop->unit_id,
-                    'amount' => (float) $pop->amount,
                     'attachmentUrl' => $pop->attachment_url,
                     'attachmentName' => $pop->attachment_name,
                     'receiptUrl' => $pop->receipt_url,
                     'receiptName' => $pop->receipt_name,
-                    'soaDocsUrl' => $pop->soa_docs_url,
-                    'soaDocsName' => $pop->soa_docs_name,
+                    'buyerEmail' => $pop->buyer_email,
                     'date' => $pop->created_at->format('Y-m-d'),
                     'notificationSent' => $pop->notification_sent,
-                    'soaRequested' => $pop->soa_requested,
                     'viewedByDeveloper' => $pop->viewed_by_developer,
                     'viewedAt' => $pop->viewed_at?->format('Y-m-d H:i:s'),
                     'timeline' => $pop->timeline,
@@ -81,7 +78,7 @@ class FinancePOPController extends Controller
             'pop_number' => 'nullable|string|unique:finance_pops,pop_number',
             'project_name' => 'required|string',
             'unit_number' => 'required|string',
-            'amount' => 'required|numeric|min:0',
+            'buyer_email' => 'nullable|email',
             'attachment' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240', // 10MB max
         ]);
 
@@ -133,7 +130,7 @@ class FinancePOPController extends Controller
                 'project_name' => $request->project_name,
                 'unit_id' => $unit->id,
                 'unit_number' => $request->unit_number,
-                'amount' => $request->amount,
+                'buyer_email' => $request->buyer_email,
                 'attachment_path' => $path,
                 'attachment_name' => $fileName,
                 'created_by' => auth()->id(),
@@ -181,7 +178,7 @@ class FinancePOPController extends Controller
 
         $validator = Validator::make($request->all(), [
             'unit_number' => 'required|string',
-            'amount' => 'required|numeric|min:0',
+            'buyer_email' => 'nullable|email',
             'attachment' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
 
@@ -208,7 +205,7 @@ class FinancePOPController extends Controller
 
             $pop->unit_id = $unit->id;
             $pop->unit_number = $request->unit_number;
-            $pop->amount = $request->amount;
+            $pop->buyer_email = $request->buyer_email;
 
             // Update attachment if provided
             if ($request->hasFile('attachment')) {
@@ -238,7 +235,7 @@ class FinancePOPController extends Controller
                     'popNumber' => $pop->pop_number,
                     'unitNumber' => $pop->unit_number,
                     'unitId' => $pop->unit_id,
-                    'amount' => (float) $pop->amount,
+                    'buyerEmail' => $pop->buyer_email,
                     'attachmentUrl' => $pop->attachment_url,
                     'attachmentName' => $pop->attachment_name,
                     'date' => $pop->created_at->format('Y-m-d'),
@@ -789,16 +786,13 @@ class FinancePOPController extends Controller
             'popNumber' => $pop->pop_number,
             'unitNumber' => $pop->unit_number,
             'unitId' => $pop->unit_id,
-            'amount' => (float) $pop->amount,
             'attachmentUrl' => $pop->attachment_url,
             'attachmentName' => $pop->attachment_name,
             'receiptUrl' => $pop->receipt_url,
             'receiptName' => $pop->receipt_name,
-            'soaDocsUrl' => $pop->soa_docs_url,
-            'soaDocsName' => $pop->soa_docs_name,
+            'buyerEmail' => $pop->buyer_email,
             'date' => $pop->created_at->format('Y-m-d'),
             'notificationSent' => $pop->notification_sent,
-            'soaRequested' => $pop->soa_requested,
             'viewedByDeveloper' => $pop->viewed_by_developer,
             'viewedAt' => $pop->viewed_at?->format('Y-m-d H:i:s'),
             'timeline' => $pop->timeline,

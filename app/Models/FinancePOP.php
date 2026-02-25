@@ -17,7 +17,6 @@ class FinancePOP extends Model
         'project_name',
         'unit_id',
         'unit_number',
-        'amount',
         'attachment_path',
         'attachment_name',
         'notification_sent',
@@ -28,29 +27,16 @@ class FinancePOP extends Model
         'receipt_name',
         'receipt_uploaded_at',
         'receipt_uploaded_by',
-        'soa_requested',
-        'soa_requested_at',
-        'soa_docs_path',
-        'soa_docs_name',
-        'soa_docs_uploaded_at',
-        'soa_uploaded_by',
-        'soa_sent_to_buyer',
-        'soa_sent_to_buyer_at',
+        'buyer_email',
         'created_by',
     ];
 
     protected $casts = [
-        'amount' => 'decimal:2',
         'notification_sent' => 'boolean',
         'notification_sent_at' => 'datetime',
         'viewed_by_developer' => 'boolean',
         'viewed_at' => 'datetime',
         'receipt_uploaded_at' => 'datetime',
-        'soa_requested' => 'boolean',
-        'soa_requested_at' => 'datetime',
-        'soa_docs_uploaded_at' => 'datetime',
-        'soa_sent_to_buyer' => 'boolean',
-        'soa_sent_to_buyer_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -87,14 +73,6 @@ class FinancePOP extends Model
     public function getReceiptUrlAttribute()
     {
         return $this->receipt_path;
-    }
-
-    /**
-     * Get the SOA docs URL.
-     */
-    public function getSoaDocsUrlAttribute()
-    {
-        return $this->soa_docs_path;
     }
 
     /**

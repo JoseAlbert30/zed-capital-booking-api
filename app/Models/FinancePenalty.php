@@ -13,7 +13,6 @@ class FinancePenalty extends Model
         'unit_id',
         'unit_number',
         'penalty_name',
-        'amount',
         'description',
         'document_path',
         'document_name',
@@ -27,7 +26,6 @@ class FinancePenalty extends Model
     ];
 
     protected $casts = [
-        'amount' => 'decimal:2',
         'notification_sent' => 'boolean',
         'notification_sent_at' => 'datetime',
         'document_uploaded_at' => 'datetime',

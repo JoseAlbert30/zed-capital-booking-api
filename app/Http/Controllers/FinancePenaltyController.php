@@ -47,7 +47,6 @@ class FinancePenaltyController extends Controller
                     'penaltyName' => $penalty->penalty_name,
                     'unitNumber' => $penalty->unit_number,
                     'unitId' => $penalty->unit_id,
-                    'amount' => (float) $penalty->amount,
                     'description' => $penalty->description,
                     'documentUrl' => $penalty->document_url,
                     'documentName' => $penalty->document_name,
@@ -70,7 +69,6 @@ class FinancePenaltyController extends Controller
             'penalty_name' => 'required|string|max:255',
             'project_name' => 'required|string',
             'unit_number' => 'required|string',
-            'amount' => 'required|numeric|min:0',
             'description' => 'nullable|string',
         ]);
 
@@ -114,7 +112,6 @@ class FinancePenaltyController extends Controller
                 'unit_number' => $request->unit_number,
                 'penalty_name' => $request->penalty_name,
                 'amount' => $request->amount,
-                'description' => $request->description,
                 'created_by' => Auth::id(),
             ]);
 
@@ -131,7 +128,6 @@ class FinancePenaltyController extends Controller
                 'penaltyName' => $penalty->penalty_name,
                 'unitNumber' => $penalty->unit_number,
                 'unitId' => $penalty->unit_id,
-                'amount' => (float) $penalty->amount,
                 'description' => $penalty->description,
                 'documentUrl' => $penalty->document_url,
                 'documentName' => $penalty->document_name,

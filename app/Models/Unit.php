@@ -99,6 +99,22 @@ class Unit extends Model
     }
 
     /**
+     * Get the finance emails for this unit.
+     */
+    public function financeEmails(): HasMany
+    {
+        return $this->hasMany(FinanceEmail::class);
+    }
+
+    /**
+     * Get the primary finance email for this unit.
+     */
+    public function primaryFinanceEmail(): HasOne
+    {
+        return $this->hasOne(FinanceEmail::class)->where('is_primary', true);
+    }
+
+    /**
      * Get the remarks for this unit.
      */
     public function remarks(): HasMany

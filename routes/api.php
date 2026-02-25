@@ -9,6 +9,7 @@ use App\Http\Controllers\SalesOfferController;
 use App\Http\Controllers\FinancePOPController;
 use App\Http\Controllers\FinancePenaltyController;
 use App\Http\Controllers\FinanceNOCController;
+use App\Http\Controllers\FinanceSOAController;
 use App\Http\Controllers\DeveloperPortalController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -177,6 +178,11 @@ Route::middleware(['auth.developer_or_admin'])->prefix('finance')->group(functio
     Route::get('/nocs', [FinanceNOCController::class, 'index']);
     Route::post('/nocs/{id}/upload-document', [FinanceNOCController::class, 'uploadDocument']);
     Route::post('/nocs/{id}/mark-as-viewed', [FinanceNOCController::class, 'markAsViewed']);
+    
+    // SOA routes (accessible by both admins and developers)
+    Route::get('/soas', [FinanceSOAController::class, 'index']);
+    Route::post('/soas/{id}/upload-document', [FinanceSOAController::class, 'uploadDocument']);
+    Route::post('/soas/{id}/mark-as-viewed', [FinanceSOAController::class, 'markAsViewed']);
 });
 
 // Units endpoint for project filtering (accessible by both admins and developers)
@@ -191,6 +197,13 @@ Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
     Route::post('/pops/{id}/request-soa', [FinancePOPController::class, 'requestSOA']);
     Route::post('/pops/{id}/resend-soa', [FinancePOPController::class, 'resendSOARequest']);
     Route::put('/projects/{projectName}/settings', [FinancePOPController::class, 'updateProjectSettings']);
+    
+    
+    // SOA admin routes
+    Route::post('/soas', [FinanceSOAController::class, 'store']);
+    Route::delete('/soas/{id}', [FinanceSOAController::class, 'destroy']);
+    Route::post('/soas/{id}/resend-notification', [FinanceSOAController::class, 'resendNotification']);
+    Route::post('/soas/{id}/send-to-buyer', [FinanceSOAController::class, 'sendToBuyer']);
     
     
     // NOC admin routes

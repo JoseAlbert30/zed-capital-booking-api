@@ -5,16 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 
-class FinanceNOC extends Model
+class FinanceSOA extends Model
 {
-    protected $table = 'finance_n_o_c_s';
+    protected $table = 'finance_s_o_a_s';
 
     protected $fillable = [
-        'noc_number',
+        'soa_number',
         'project_name',
         'unit_id',
         'unit_number',
-        'noc_name',
         'description',
         'document_path',
         'document_name',
@@ -24,6 +23,9 @@ class FinanceNOC extends Model
         'notification_sent_at',
         'viewed_by_developer',
         'viewed_at',
+        'sent_to_buyer',
+        'sent_to_buyer_at',
+        'sent_to_buyer_email',
         'created_by',
     ];
 
@@ -33,10 +35,12 @@ class FinanceNOC extends Model
         'document_uploaded_at' => 'datetime',
         'viewed_by_developer' => 'boolean',
         'viewed_at' => 'datetime',
+        'sent_to_buyer' => 'boolean',
+        'sent_to_buyer_at' => 'datetime',
     ];
 
     /**
-     * Get the creator of the NOC
+     * Get the creator of the SOA
      */
     public function creator()
     {
@@ -44,7 +48,7 @@ class FinanceNOC extends Model
     }
 
     /**
-     * Get the unit associated with the NOC
+     * Get the unit associated with the SOA
      */
     public function unit()
     {
@@ -60,16 +64,16 @@ class FinanceNOC extends Model
     }
 
     /**
-     * Get the timeline of events for this NOC
+     * Get the timeline of events for this SOA
      */
     public function getTimelineAttribute()
     {
         $timeline = [];
 
-        // NOC requested
+        // SOA requested
         if ($this->created_at) {
             $timeline[] = [
-                'action' => 'NOC Request Created',
+                'action' => 'SOA Request Created',
                 'date' => $this->created_at->timezone('Asia/Dubai')->format('M d, Y'),
                 'time' => $this->created_at->timezone('Asia/Dubai')->format('h:i A'),
                 'user' => $this->creator ? $this->creator->full_name : 'Admin',
@@ -99,10 +103,20 @@ class FinanceNOC extends Model
         // Document uploaded
         if ($this->document_uploaded_at) {
             $timeline[] = [
-                'action' => 'NOC Document Uploaded',
+                'action' => 'SOA Document Uploaded',
                 'date' => $this->document_uploaded_at->timezone('Asia/Dubai')->format('M d, Y'),
                 'time' => $this->document_uploaded_at->timezone('Asia/Dubai')->format('h:i A'),
                 'user' => $this->document_uploaded_by ?? 'Developer',
+            ];
+        }
+
+        // Sent to buyer
+        if ($this->sent_to_buyer_at) {
+            $timeline[] = [
+                'action' => 'SOA Sent to Buyer',
+                'date' => $this->sent_to_buyer_at->timezone('Asia/Dubai')->format('M d, Y'),
+                'time' => $this->sent_to_buyer_at->timezone('Asia/Dubai')->format('h:i A'),
+                'user' => 'Admin',
             ];
         }
 
@@ -110,16 +124,16 @@ class FinanceNOC extends Model
     }
 
     /**
-     * Boot method to delete file when NOC is deleted
+     * Boot method to delete file when SOA is deleted
      */
     protected static function boot()
     {
         parent::boot();
 
-        static::deleting(function ($noc) {
+        static::deleting(function ($soa) {
             // Delete document file if exists
-            if ($noc->document_path && Storage::disk('public')->exists($noc->document_path)) {
-                Storage::disk('public')->delete($noc->document_path);
+            if ($soa->document_path && Storage::disk('public')->exists($soa->document_path)) {
+                Storage::disk('public')->delete($soa->document_path);
             }
         });
     }

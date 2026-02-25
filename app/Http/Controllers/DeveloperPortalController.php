@@ -213,7 +213,7 @@ class DeveloperPortalController extends Controller
                     'id' => $pop->id,
                     'popNumber' => $pop->pop_number,
                     'unitNumber' => $pop->unit_number,
-                    'amount' => (float) $pop->amount,
+                    'buyerEmail' => $pop->buyer_email,
                     'attachmentUrl' => $pop->attachment_url,
                     'attachmentName' => $pop->attachment_name,
                     'receiptUrl' => $pop->receipt_url,
