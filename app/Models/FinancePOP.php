@@ -27,8 +27,12 @@ class FinancePOP extends Model
         'receipt_name',
         'receipt_uploaded_at',
         'receipt_uploaded_by',
+        'receipt_sent_to_buyer',
+        'receipt_sent_to_buyer_at',
+        'receipt_sent_to_buyer_email',
         'buyer_email',
         'created_by',
+        'notes',
     ];
 
     protected $casts = [
@@ -37,6 +41,8 @@ class FinancePOP extends Model
         'viewed_by_developer' => 'boolean',
         'viewed_at' => 'datetime',
         'receipt_uploaded_at' => 'datetime',
+        'receipt_sent_to_buyer' => 'boolean',
+        'receipt_sent_to_buyer_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

@@ -55,6 +55,9 @@ class FinancePOPController extends Controller
                     'notificationSent' => $pop->notification_sent,
                     'viewedByDeveloper' => $pop->viewed_by_developer,
                     'viewedAt' => $pop->viewed_at?->format('Y-m-d H:i:s'),
+                    'receiptSentToBuyer' => $pop->receipt_sent_to_buyer,
+                    'receiptSentToBuyerAt' => $pop->receipt_sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                    'notes' => $pop->notes,
                     'timeline' => $pop->timeline,
                     'createdBy' => $pop->creator ? [
                         'name' => $pop->creator->full_name,
@@ -80,6 +83,7 @@ class FinancePOPController extends Controller
             'unit_number' => 'required|string',
             'buyer_email' => 'nullable|email',
             'attachment' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240', // 10MB max
+            'notes' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -133,6 +137,7 @@ class FinancePOPController extends Controller
                 'buyer_email' => $request->buyer_email,
                 'attachment_path' => $path,
                 'attachment_name' => $fileName,
+                'notes' => $request->notes,
                 'created_by' => auth()->id(),
             ]);
 
@@ -337,6 +342,7 @@ class FinancePOPController extends Controller
                 'developer_email' => $property->developer_email,
                 'developer_name' => $property->developer_name,
                 'cc_emails' => $property->cc_emails,
+                'penalty_initiated_by' => $property->penalty_initiated_by ?? 'admin',
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -355,6 +361,7 @@ class FinancePOPController extends Controller
             'developer_email' => 'nullable|email',
             'developer_name' => 'nullable|string',
             'cc_emails' => 'nullable|string',
+            'penalty_initiated_by' => 'nullable|in:admin,developer',
         ]);
 
         if ($validator->fails()) {
@@ -378,6 +385,11 @@ class FinancePOPController extends Controller
             $property->developer_email = $request->input('developer_email');
             $property->developer_name = $request->input('developer_name');
             $property->cc_emails = $request->input('cc_emails');
+            
+            if ($request->has('penalty_initiated_by')) {
+                $property->penalty_initiated_by = $request->input('penalty_initiated_by');
+            }
+            
             $property->save();
 
             return response()->json([
@@ -886,6 +898,91 @@ class FinancePOPController extends Controller
         } catch (\Exception $e) {
             \Log::error("Failed to send POP to developer: " . $e->getMessage());
             // Don't throw - just log the error so POP creation still succeeds
+        }
+    }
+
+    /**
+     * Send receipt to buyer via finance email
+     */
+    public function sendReceiptToBuyer(Request $request, $id)
+    {
+        $pop = FinancePOP::with('unit.primaryFinanceEmail')->find($id);
+
+        if (!$pop) {
+            return response()->json([
+                'success' => false,
+                'message' => 'POP not found',
+            ], 404);
+        }
+
+        if (!$pop->receipt_path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Receipt has not been uploaded yet',
+            ], 400);
+        }
+
+        try {
+            // Get buyer email from unit finance emails
+            $buyerEmail = null;
+            $buyerName = 'Buyer';
+
+            if ($pop->unit && $pop->unit->primaryFinanceEmail) {
+                $financeEmail = $pop->unit->primaryFinanceEmail;
+                $buyerEmail = $financeEmail->email;
+                $buyerName = $financeEmail->recipient_name ?? 'Buyer';
+            }
+
+            if (!$buyerEmail) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No finance email found for this unit. Please add a finance email first.',
+                ], 400);
+            }
+
+            // Prepare email data
+            $emailData = [
+                'buyerName' => $buyerName,
+                'popNumber' => $pop->pop_number,
+                'unitNumber' => $pop->unit_number,
+                'projectName' => $pop->project_name,
+                'receiptUrl' => url('api/storage/' . $pop->receipt_path),
+            ];
+
+            // Send email
+            Mail::send('emails.receipt-sent-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop) {
+                $message->to($buyerEmail)
+                    ->subject("Payment Receipt - Unit {$pop->unit_number}");
+            });
+
+            // Update POP
+            $pop->receipt_sent_to_buyer = true;
+            $pop->receipt_sent_to_buyer_at = now();
+            $pop->receipt_sent_to_buyer_email = $buyerEmail;
+            $pop->save();
+
+            $popData = [
+                'id' => $pop->id,
+                'popNumber' => $pop->pop_number,
+                'unitNumber' => $pop->unit_number,
+                'unitId' => $pop->unit_id,
+                'receiptUrl' => $pop->receipt_url,
+                'receiptName' => $pop->receipt_name,
+                'date' => $pop->created_at->format('Y-m-d'),
+                'receiptSentToBuyer' => $pop->receipt_sent_to_buyer,
+                'receiptSentToBuyerAt' => $pop->receipt_sent_to_buyer_at?->format('Y-m-d H:i:s'),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Receipt sent to buyer successfully',
+                'pop' => $popData,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send receipt to buyer: ' . $e->getMessage(),
+            ], 500);
         }
     }
 }

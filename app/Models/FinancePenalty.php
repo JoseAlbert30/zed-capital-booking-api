@@ -21,8 +21,13 @@ class FinancePenalty extends Model
         'notification_sent',
         'notification_sent_at',
         'viewed_by_developer',
+        'viewed_by_admin',
         'viewed_at',
+        'sent_to_buyer',
+        'sent_to_buyer_at',
+        'sent_to_buyer_email',
         'created_by',
+        'notes',
     ];
 
     protected $casts = [
@@ -30,7 +35,10 @@ class FinancePenalty extends Model
         'notification_sent_at' => 'datetime',
         'document_uploaded_at' => 'datetime',
         'viewed_by_developer' => 'boolean',
+        'viewed_by_admin' => 'boolean',
         'viewed_at' => 'datetime',
+        'sent_to_buyer' => 'boolean',
+        'sent_to_buyer_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -54,6 +62,22 @@ class FinancePenalty extends Model
     }
 
     /**
+     * Get the property/project associated with this penalty
+     */
+    public function property()
+    {
+        return $this->belongsTo(Property::class, 'project_name', 'project_name');
+    }
+
+    /**
+     * Get the attachments for this penalty
+     */
+    public function attachments()
+    {
+        return $this->morphMany(FinanceAttachment::class, 'attachable');
+    }
+
+    /**
      * Get the document URL
      */
     public function getDocumentUrlAttribute()
@@ -67,32 +91,53 @@ class FinancePenalty extends Model
     public function getTimelineAttribute()
     {
         $timeline = [];
+        
+        // Get property to check penalty_initiated_by
+        $property = $this->property;
+        $penaltyInitiatedBy = $property->penalty_initiated_by ?? 'admin';
 
         if ($this->created_at) {
+            $createdBy = $this->creator ? $this->creator->full_name : 'Admin';
+            $requestText = $penaltyInitiatedBy === 'admin' ? 'Penalty Requested' : 'Penalty Submitted';
+            
             $timeline[] = [
-                'action' => 'Penalty Requested',
+                'action' => $requestText,
                 'date' => $this->created_at->timezone('Asia/Dubai')->format('Y-m-d'),
                 'time' => $this->created_at->timezone('Asia/Dubai')->format('H:i:s'),
-                'user' => $this->creator ? $this->creator->full_name : 'Admin',
+                'user' => $createdBy,
             ];
         }
 
         if ($this->notification_sent_at) {
+            // If admin created, sent to developer. If developer created, sent to admin
+            $sentTo = $penaltyInitiatedBy === 'admin' ? 'Developer' : 'Admin';
+            $sentBy = $this->creator ? $this->creator->full_name : 'System';
+            
             $timeline[] = [
-                'action' => 'Sent to Developer',
+                'action' => "Sent to $sentTo",
                 'date' => $this->notification_sent_at->timezone('Asia/Dubai')->format('Y-m-d'),
                 'time' => $this->notification_sent_at->timezone('Asia/Dubai')->format('H:i:s'),
-                'user' => $this->creator ? $this->creator->full_name : 'Admin',
+                'user' => $sentBy,
             ];
         }
 
         if ($this->viewed_at) {
-            $timeline[] = [
-                'action' => 'Viewed by Developer',
-                'date' => $this->viewed_at->timezone('Asia/Dubai')->format('Y-m-d'),
-                'time' => $this->viewed_at->timezone('Asia/Dubai')->format('H:i:s'),
-                'user' => 'Developer',
-            ];
+            // Show who viewed it based on the flags
+            if ($penaltyInitiatedBy === 'admin' && $this->viewed_by_developer) {
+                $timeline[] = [
+                    'action' => 'Viewed by Developer',
+                    'date' => $this->viewed_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                    'time' => $this->viewed_at->timezone('Asia/Dubai')->format('H:i:s'),
+                    'user' => 'Developer',
+                ];
+            } elseif ($penaltyInitiatedBy === 'developer' && $this->viewed_by_admin) {
+                $timeline[] = [
+                    'action' => 'Viewed by Admin',
+                    'date' => $this->viewed_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                    'time' => $this->viewed_at->timezone('Asia/Dubai')->format('H:i:s'),
+                    'user' => 'Admin',
+                ];
+            }
         }
 
         if ($this->document_uploaded_at) {

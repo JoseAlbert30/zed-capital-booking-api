@@ -30,7 +30,7 @@ class FinanceNOCController extends Controller
             $project = $request->attributes->get('developer_project');
         }
 
-        $query = FinanceNOC::with(['creator:id,full_name,email', 'unit'])
+        $query = FinanceNOC::with(['creator:id,full_name,email', 'unit', 'attachments'])
             ->orderBy('created_at', 'desc');
 
         if ($project) {
@@ -55,6 +55,18 @@ class FinanceNOCController extends Controller
                     'notificationSent' => $noc->notification_sent,
                     'viewedByDeveloper' => $noc->viewed_by_developer,
                     'viewedAt' => $noc->viewed_at?->format('Y-m-d H:i:s'),
+                    'sentToBuyer' => $noc->sent_to_buyer,
+                    'sentToBuyerAt' => $noc->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                    'notes' => $noc->notes,
+                    'attachments' => $noc->attachments->map(function ($att) {
+                        return [
+                            'id' => $att->id,
+                            'fileName' => $att->file_name,
+                            'fileUrl' => $att->file_url,
+                            'fileSize' => $att->file_size,
+                            'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                        ];
+                    }),
                     'timeline' => $noc->timeline,
                 ];
             }),
@@ -71,6 +83,7 @@ class FinanceNOCController extends Controller
             'project_name' => 'required|string',
             'unit_number' => 'required|string',
             'description' => 'nullable|string',
+            'notes' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -113,6 +126,7 @@ class FinanceNOCController extends Controller
                 'unit_number' => $request->unit_number,
                 'noc_name' => $request->noc_name,
                 'description' => $request->description,
+                'notes' => $request->notes,
                 'created_by' => Auth::id(),
             ]);
 
@@ -460,6 +474,173 @@ class FinanceNOCController extends Controller
 
         } catch (\Exception $e) {
             Log::error("Failed to send NOC document uploaded notification: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send NOC document to buyer via finance email
+     */
+    public function sendToBuyer(Request $request, $id)
+    {
+        $noc = FinanceNOC::with('unit.primaryFinanceEmail')->find($id);
+
+        if (!$noc) {
+            return response()->json([
+                'success' => false,
+                'message' => 'NOC not found',
+            ], 404);
+        }
+
+        if (!$noc->document_path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'NOC document has not been uploaded yet',
+            ], 400);
+        }
+
+        try {
+            // Get buyer email from unit finance emails
+            $buyerEmail = null;
+            $buyerName = 'Buyer';
+
+            if ($noc->unit && $noc->unit->primaryFinanceEmail) {
+                $financeEmail = $noc->unit->primaryFinanceEmail;
+                $buyerEmail = $financeEmail->email;
+                $buyerName = $financeEmail->recipient_name ?? 'Buyer';
+            }
+
+            if (!$buyerEmail) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No finance email found for this unit. Please add a finance email first.',
+                ], 400);
+            }
+
+            // Prepare email data
+            $emailData = [
+                'buyerName' => $buyerName,
+                'nocNumber' => $noc->noc_number,
+                'nocName' => $noc->noc_name,
+                'unitNumber' => $noc->unit_number,
+                'projectName' => $noc->project_name,
+                'documentUrl' => url('api/storage/' . $noc->document_path),
+            ];
+
+            // Send email
+            Mail::send('emails.noc-sent-to-buyer', $emailData, function ($message) use ($buyerEmail, $noc) {
+                $message->to($buyerEmail)
+                    ->subject("NOC Document - {$noc->noc_name}");
+            });
+
+            // Update NOC
+            $noc->sent_to_buyer = true;
+            $noc->sent_to_buyer_at = now();
+            $noc->sent_to_buyer_email = $buyerEmail;
+            $noc->save();
+
+            $nocData = [
+                'id' => $noc->id,
+                'nocNumber' => $noc->noc_number,
+                'nocName' => $noc->noc_name,
+                'unitNumber' => $noc->unit_number,
+                'unitId' => $noc->unit_id,
+                'documentUrl' => $noc->document_url,
+                'documentName' => $noc->document_name,
+                'date' => $noc->created_at->format('Y-m-d'),
+                'sentToBuyer' => $noc->sent_to_buyer,
+                'sentToBuyerAt' => $noc->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'NOC sent to buyer successfully',
+                'noc' => $nocData,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send NOC to buyer: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload attachment to NOC
+     */
+    public function uploadAttachment(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'attachment' => 'required|file|max:10240', // 10MB max
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $noc = FinanceNOC::findOrFail($id);
+            $file = $request->file('attachment');
+            
+            // Generate unique filename
+            $filename = time() . '_' . $file->getClientOriginalName();
+            $filePath = $file->storeAs('finance/noc/attachments', $filename, 'public');
+            
+            // Create attachment record
+            $attachment = $noc->attachments()->create([
+                'file_path' => $filePath,
+                'file_name' => $file->getClientOriginalName(),
+                'file_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+                'uploaded_by' => Auth::id(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attachment uploaded successfully',
+                'attachment' => [
+                    'id' => $attachment->id,
+                    'fileName' => $attachment->file_name,
+                    'fileUrl' => $attachment->file_url,
+                    'fileSize' => $attachment->file_size,
+                    'uploadedAt' => $attachment->created_at->format('Y-m-d H:i:s'),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload attachment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete attachment from NOC
+     */
+    public function deleteAttachment($id, $attachmentId)
+    {
+        try {
+            $noc = FinanceNOC::findOrFail($id);
+            $attachment = $noc->attachments()->findOrFail($attachmentId);
+            
+            // Delete file from storage
+            \Storage::disk('public')->delete($attachment->file_path);
+            
+            // Delete database record
+            $attachment->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attachment deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete attachment: ' . $e->getMessage(),
+            ], 500);
         }
     }
 }

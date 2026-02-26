@@ -24,7 +24,11 @@ class FinanceNOC extends Model
         'notification_sent_at',
         'viewed_by_developer',
         'viewed_at',
+        'sent_to_buyer',
+        'sent_to_buyer_at',
+        'sent_to_buyer_email',
         'created_by',
+        'notes',
     ];
 
     protected $casts = [
@@ -33,6 +37,8 @@ class FinanceNOC extends Model
         'document_uploaded_at' => 'datetime',
         'viewed_by_developer' => 'boolean',
         'viewed_at' => 'datetime',
+        'sent_to_buyer' => 'boolean',
+        'sent_to_buyer_at' => 'datetime',
     ];
 
     /**
@@ -49,6 +55,14 @@ class FinanceNOC extends Model
     public function unit()
     {
         return $this->belongsTo(Unit::class, 'unit_id');
+    }
+
+    /**
+     * Get the attachments for this NOC
+     */
+    public function attachments()
+    {
+        return $this->morphMany(FinanceAttachment::class, 'attachable');
     }
 
     /**

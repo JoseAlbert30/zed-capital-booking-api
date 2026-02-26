@@ -30,7 +30,7 @@ class FinanceSOAController extends Controller
             $project = $request->attributes->get('developer_project');
         }
 
-        $query = FinanceSOA::with(['creator:id,full_name,email', 'unit'])
+        $query = FinanceSOA::with(['creator:id,full_name,email', 'unit', 'attachments'])
             ->orderBy('created_at', 'desc');
 
         if ($project) {
@@ -56,6 +56,16 @@ class FinanceSOAController extends Controller
                     'viewedAt' => $soa->viewed_at?->format('Y-m-d H:i:s'),
                     'sentToBuyer' => $soa->sent_to_buyer,
                     'sentToBuyerAt' => $soa->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                    'notes' => $soa->notes,
+                    'attachments' => $soa->attachments->map(function ($att) {
+                        return [
+                            'id' => $att->id,
+                            'fileName' => $att->file_name,
+                            'fileUrl' => $att->file_url,
+                            'fileSize' => $att->file_size,
+                            'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                        ];
+                    }),
                     'timeline' => $soa->timeline,
                 ];
             }),
@@ -71,6 +81,7 @@ class FinanceSOAController extends Controller
             'project_name' => 'required|string',
             'unit_number' => 'required|string',
             'description' => 'nullable|string',
+            'notes' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -112,6 +123,7 @@ class FinanceSOAController extends Controller
                 'unit_id' => $unit->id,
                 'unit_number' => $request->unit_number,
                 'description' => $request->description,
+                'notes' => $request->notes,
                 'created_by' => Auth::id(),
             ]);
 
@@ -548,6 +560,86 @@ class FinanceSOAController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send SOA to buyer: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload attachment to SOA
+     */
+    public function uploadAttachment(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'attachment' => 'required|file|max:10240', // 10MB max
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $soa = FinanceSOA::findOrFail($id);
+            $file = $request->file('attachment');
+            
+            // Generate unique filename
+            $filename = time() . '_' . $file->getClientOriginalName();
+            $filePath = $file->storeAs('finance/soa/attachments', $filename, 'public');
+            
+            // Create attachment record
+            $attachment = $soa->attachments()->create([
+                'file_path' => $filePath,
+                'file_name' => $file->getClientOriginalName(),
+                'file_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+                'uploaded_by' => Auth::id(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attachment uploaded successfully',
+                'attachment' => [
+                    'id' => $attachment->id,
+                    'fileName' => $attachment->file_name,
+                    'fileUrl' => $attachment->file_url,
+                    'fileSize' => $attachment->file_size,
+                    'uploadedAt' => $attachment->created_at->format('Y-m-d H:i:s'),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload attachment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete attachment from SOA
+     */
+    public function deleteAttachment($id, $attachmentId)
+    {
+        try {
+            $soa = FinanceSOA::findOrFail($id);
+            $attachment = $soa->attachments()->findOrFail($attachmentId);
+            
+            // Delete file from storage
+            \Storage::disk('public')->delete($attachment->file_path);
+            
+            // Delete database record
+            $attachment->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attachment deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete attachment: ' . $e->getMessage(),
             ], 500);
         }
     }

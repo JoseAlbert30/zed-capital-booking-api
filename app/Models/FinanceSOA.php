@@ -27,6 +27,7 @@ class FinanceSOA extends Model
         'sent_to_buyer_at',
         'sent_to_buyer_email',
         'created_by',
+        'notes',
     ];
 
     protected $casts = [
@@ -53,6 +54,14 @@ class FinanceSOA extends Model
     public function unit()
     {
         return $this->belongsTo(Unit::class, 'unit_id');
+    }
+
+    /**
+     * Get the attachments for this SOA
+     */
+    public function attachments()
+    {
+        return $this->morphMany(FinanceAttachment::class, 'attachable');
     }
 
     /**
