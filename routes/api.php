@@ -10,6 +10,7 @@ use App\Http\Controllers\FinancePOPController;
 use App\Http\Controllers\FinancePenaltyController;
 use App\Http\Controllers\FinanceNOCController;
 use App\Http\Controllers\FinanceSOAController;
+use App\Http\Controllers\FinanceThirdpartyController;
 use App\Http\Controllers\DeveloperPortalController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -173,6 +174,9 @@ Route::middleware(['auth.developer_or_admin'])->prefix('finance')->group(functio
     Route::get('/penalties', [FinancePenaltyController::class, 'index']);
     Route::post('/penalties', [FinancePenaltyController::class, 'store']);
     Route::post('/penalties/{id}/upload-document', [FinancePenaltyController::class, 'uploadDocument']);
+    Route::post('/penalties/{id}/upload-proof-of-payment', [FinancePenaltyController::class, 'uploadProofOfPayment']);
+    Route::post('/penalties/{id}/upload-receipt', [FinancePenaltyController::class, 'uploadReceipt']);
+    Route::post('/penalties/{id}/send-receipt-to-buyer', [FinancePenaltyController::class, 'sendReceiptToBuyer']);
     Route::post('/penalties/{id}/mark-as-viewed', [FinancePenaltyController::class, 'markAsViewed']);
     Route::post('/penalties/{id}/attachments', [FinancePenaltyController::class, 'uploadAttachment']);
     Route::delete('/penalties/{id}/attachments/{attachmentId}', [FinancePenaltyController::class, 'deleteAttachment']);
@@ -186,6 +190,11 @@ Route::middleware(['auth.developer_or_admin'])->prefix('finance')->group(functio
     Route::get('/soas', [FinanceSOAController::class, 'index']);
     Route::post('/soas/{id}/upload-document', [FinanceSOAController::class, 'uploadDocument']);
     Route::post('/soas/{id}/mark-as-viewed', [FinanceSOAController::class, 'markAsViewed']);
+    
+    // Thirdparty routes (accessible by both admins and developers)
+    Route::get('/thirdparties', [FinanceThirdpartyController::class, 'index']);
+    Route::post('/thirdparties/{id}/upload-receipt', [FinanceThirdpartyController::class, 'uploadReceipt']);
+    Route::post('/thirdparties/{id}/mark-as-viewed', [FinanceThirdpartyController::class, 'markAsViewed']);
 });
 
 // Units endpoint for project filtering (accessible by both admins and developers)
@@ -208,6 +217,7 @@ Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
     Route::delete('/soas/{id}', [FinanceSOAController::class, 'destroy']);
     Route::post('/soas/{id}/resend-notification', [FinanceSOAController::class, 'resendNotification']);
     Route::post('/soas/{id}/send-to-buyer', [FinanceSOAController::class, 'sendToBuyer']);
+    Route::post('/soas/{id}/resend-to-buyer', [FinanceSOAController::class, 'resendToBuyer']);
     Route::post('/soas/{id}/attachments', [FinanceSOAController::class, 'uploadAttachment']);
     Route::delete('/soas/{id}/attachments/{attachmentId}', [FinanceSOAController::class, 'deleteAttachment']);
     
@@ -224,6 +234,16 @@ Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
     Route::delete('/penalties/{id}', [FinancePenaltyController::class, 'destroy']);
     Route::post('/penalties/{id}/resend-notification', [FinancePenaltyController::class, 'resendNotification']);
     Route::post('/penalties/{id}/send-to-buyer', [FinancePenaltyController::class, 'sendToBuyer']);
+    
+    // Thirdparty admin routes
+    Route::post('/thirdparties', [FinanceThirdpartyController::class, 'store']);
+    Route::delete('/thirdparties/{id}', [FinanceThirdpartyController::class, 'destroy']);
+    Route::post('/thirdparties/{id}/send-to-buyer', [FinanceThirdpartyController::class, 'sendToBuyer']);
+    Route::post('/thirdparties/{id}/send-receipt-to-buyer', [FinanceThirdpartyController::class, 'sendReceiptToBuyer']);
+    Route::post('/thirdparties/{id}/upload-signed-document', [FinanceThirdpartyController::class, 'uploadSignedDocument']);
+    Route::post('/thirdparties/{id}/send-to-developer', [FinanceThirdpartyController::class, 'sendToDeveloper']);
+    Route::post('/thirdparties/{id}/attachments', [FinanceThirdpartyController::class, 'uploadAttachment']);
+    Route::delete('/thirdparties/{id}/attachments/{attachmentId}', [FinanceThirdpartyController::class, 'deleteAttachment']);
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {

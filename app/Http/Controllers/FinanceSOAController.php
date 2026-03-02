@@ -565,6 +565,79 @@ class FinanceSOAController extends Controller
     }
 
     /**
+     * Resend SOA to buyer
+     */
+    public function resendToBuyer(Request $request, $id)
+    {
+        $soa = FinanceSOA::with('unit.primaryFinanceEmail')->find($id);
+
+        if (!$soa) {
+            return response()->json([
+                'success' => false,
+                'message' => 'SOA not found',
+            ], 404);
+        }
+
+        if (!$soa->document_path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'SOA document has not been uploaded yet',
+            ], 400);
+        }
+
+        if (!$soa->sent_to_buyer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'SOA has not been sent to buyer yet',
+            ], 400);
+        }
+
+        try {
+            // Get buyer email from unit finance emails
+            $buyerEmail = null;
+            $buyerName = 'Buyer';
+
+            if ($soa->unit && $soa->unit->primaryFinanceEmail) {
+                $financeEmail = $soa->unit->primaryFinanceEmail;
+                $buyerEmail = $financeEmail->email;
+                $buyerName = $financeEmail->recipient_name ?? 'Buyer';
+            }
+
+            if (!$buyerEmail) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No finance email found for this unit. Please add a finance email first.',
+                ], 400);
+            }
+
+            // Prepare email data
+            $emailData = [
+                'buyerName' => $buyerName,
+                'soaNumber' => $soa->soa_number,
+                'unitNumber' => $soa->unit_number,
+                'projectName' => $soa->project_name,
+                'documentUrl' => url('api/storage/' . $soa->document_path),
+            ];
+
+            // Send email
+            Mail::send('emails.soa-sent-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
+                $message->to($buyerEmail)
+                    ->subject("Statement of Account - Unit {$soa->unit_number}");
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'SOA resent to buyer successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to resend SOA to buyer: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Upload attachment to SOA
      */
     public function uploadAttachment(Request $request, $id)

@@ -18,14 +18,20 @@ class FinancePenalty extends Model
         'document_name',
         'document_uploaded_at',
         'document_uploaded_by',
+        'proof_of_payment_path',
+        'proof_of_payment_name',
+        'proof_of_payment_uploaded_at',
+        'receipt_path',
+        'receipt_name',
+        'receipt_uploaded_at',
+        'receipt_sent_to_buyer',
+        'receipt_sent_to_buyer_at',
+        'receipt_sent_to_buyer_email',
         'notification_sent',
         'notification_sent_at',
         'viewed_by_developer',
         'viewed_by_admin',
         'viewed_at',
-        'sent_to_buyer',
-        'sent_to_buyer_at',
-        'sent_to_buyer_email',
         'created_by',
         'notes',
     ];
@@ -34,16 +40,18 @@ class FinancePenalty extends Model
         'notification_sent' => 'boolean',
         'notification_sent_at' => 'datetime',
         'document_uploaded_at' => 'datetime',
+        'proof_of_payment_uploaded_at' => 'datetime',
+        'receipt_uploaded_at' => 'datetime',
+        'receipt_sent_to_buyer' => 'boolean',
+        'receipt_sent_to_buyer_at' => 'datetime',
         'viewed_by_developer' => 'boolean',
         'viewed_by_admin' => 'boolean',
         'viewed_at' => 'datetime',
-        'sent_to_buyer' => 'boolean',
-        'sent_to_buyer_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
 
-    protected $appends = ['document_url', 'timeline'];
+    protected $appends = ['document_url', 'proof_of_payment_url', 'receipt_url', 'timeline'];
 
     /**
      * Get the user who created this penalty
@@ -86,6 +94,22 @@ class FinancePenalty extends Model
     }
 
     /**
+     * Get the proof of payment URL
+     */
+    public function getProofOfPaymentUrlAttribute()
+    {
+        return $this->proof_of_payment_path ? Storage::disk('public')->url($this->proof_of_payment_path) : null;
+    }
+
+    /**
+     * Get the receipt URL
+     */
+    public function getReceiptUrlAttribute()
+    {
+        return $this->receipt_path ? Storage::disk('public')->url($this->receipt_path) : null;
+    }
+
+    /**
      * Get the timeline of events
      */
     public function getTimelineAttribute()
@@ -96,33 +120,58 @@ class FinancePenalty extends Model
         $property = $this->property;
         $penaltyInitiatedBy = $property->penalty_initiated_by ?? 'admin';
 
+        /**
+         * WORKFLOW:
+         * 
+         * Developer-initiated:
+         * 1. Developer creates penalty statement
+         * 2. Admin uploads proof of payment
+         * 3. Developer uploads receipt
+         * 4. Admin sends receipt to buyer
+         * 
+         * Admin-initiated:
+         * 1. Admin creates penalty statement (with proof of payment already included)
+         * 2. Developer uploads receipt
+         * 3. Admin sends receipt to buyer
+         */
+
+        // Step 1: Penalty Created
         if ($this->created_at) {
-            $createdBy = $this->creator ? $this->creator->full_name : 'Admin';
-            $requestText = $penaltyInitiatedBy === 'admin' ? 'Penalty Requested' : 'Penalty Submitted';
+            $createdBy = $this->creator ? $this->creator->full_name : ($penaltyInitiatedBy === 'admin' ? 'Admin' : 'Developer');
             
-            $timeline[] = [
-                'action' => $requestText,
-                'date' => $this->created_at->timezone('Asia/Dubai')->format('Y-m-d'),
-                'time' => $this->created_at->timezone('Asia/Dubai')->format('H:i:s'),
-                'user' => $createdBy,
-            ];
+            if ($penaltyInitiatedBy === 'developer') {
+                // Developer creates penalty statement
+                $timeline[] = [
+                    'action' => 'Penalty Statement Created by Developer',
+                    'date' => $this->created_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                    'time' => $this->created_at->timezone('Asia/Dubai')->format('H:i:s'),
+                    'user' => $createdBy,
+                ];
+            } else {
+                // Admin creates penalty (with proof already)
+                $timeline[] = [
+                    'action' => 'Penalty Statement Created by Admin',
+                    'date' => $this->created_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                    'time' => $this->created_at->timezone('Asia/Dubai')->format('H:i:s'),
+                    'user' => $createdBy,
+                ];
+            }
         }
 
+        // Step 2: Notification sent to other party
         if ($this->notification_sent_at) {
-            // If admin created, sent to developer. If developer created, sent to admin
             $sentTo = $penaltyInitiatedBy === 'admin' ? 'Developer' : 'Admin';
-            $sentBy = $this->creator ? $this->creator->full_name : 'System';
             
             $timeline[] = [
                 'action' => "Sent to $sentTo",
                 'date' => $this->notification_sent_at->timezone('Asia/Dubai')->format('Y-m-d'),
                 'time' => $this->notification_sent_at->timezone('Asia/Dubai')->format('H:i:s'),
-                'user' => $sentBy,
+                'user' => $penaltyInitiatedBy === 'admin' ? 'Admin' : 'Developer',
             ];
         }
 
+        // Step 3: Viewed by other party
         if ($this->viewed_at) {
-            // Show who viewed it based on the flags
             if ($penaltyInitiatedBy === 'admin' && $this->viewed_by_developer) {
                 $timeline[] = [
                     'action' => 'Viewed by Developer',
@@ -140,12 +189,33 @@ class FinancePenalty extends Model
             }
         }
 
-        if ($this->document_uploaded_at) {
+        // Step 4: Proof of Payment Uploaded (Admin uploads - for developer-initiated OR during creation for admin-initiated)
+        if ($this->proof_of_payment_uploaded_at) {
             $timeline[] = [
-                'action' => 'Penalty Document Uploaded',
-                'date' => $this->document_uploaded_at->timezone('Asia/Dubai')->format('Y-m-d'),
-                'time' => $this->document_uploaded_at->timezone('Asia/Dubai')->format('H:i:s'),
-                'user' => $this->document_uploaded_by ?: 'Developer',
+                'action' => 'Proof of Payment Uploaded',
+                'date' => $this->proof_of_payment_uploaded_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->proof_of_payment_uploaded_at->timezone('Asia/Dubai')->format('H:i:s'),
+                'user' => 'Admin',
+            ];
+        }
+
+        // Step 5: Receipt Uploaded (Developer uploads)
+        if ($this->receipt_uploaded_at) {
+            $timeline[] = [
+                'action' => 'Receipt Uploaded',
+                'date' => $this->receipt_uploaded_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->receipt_uploaded_at->timezone('Asia/Dubai')->format('H:i:s'),
+                'user' => 'Developer',
+            ];
+        }
+
+        // Step 6: Receipt Sent to Buyer (Admin sends)
+        if ($this->receipt_sent_to_buyer_at) {
+            $timeline[] = [
+                'action' => 'Receipt Sent to Buyer',
+                'date' => $this->receipt_sent_to_buyer_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->receipt_sent_to_buyer_at->timezone('Asia/Dubai')->format('H:i:s'),
+                'user' => 'Admin',
             ];
         }
 
@@ -160,6 +230,12 @@ class FinancePenalty extends Model
         static::deleting(function ($penalty) {
             if ($penalty->document_path && Storage::disk('public')->exists($penalty->document_path)) {
                 Storage::disk('public')->delete($penalty->document_path);
+            }
+            if ($penalty->proof_of_payment_path && Storage::disk('public')->exists($penalty->proof_of_payment_path)) {
+                Storage::disk('public')->delete($penalty->proof_of_payment_path);
+            }
+            if ($penalty->receipt_path && Storage::disk('public')->exists($penalty->receipt_path)) {
+                Storage::disk('public')->delete($penalty->receipt_path);
             }
         });
     }

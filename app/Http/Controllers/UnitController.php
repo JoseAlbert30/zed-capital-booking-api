@@ -208,7 +208,8 @@ class UnitController extends Controller
                 'users',
                 'attachments.unit.property',
                 'remarks',
-                'bookings.user'
+                'bookings.user',
+                'primaryFinanceEmail'
             ])->findOrFail($id);
 
             return response()->json([

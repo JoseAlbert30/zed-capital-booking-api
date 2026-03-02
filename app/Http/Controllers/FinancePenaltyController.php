@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FinancePenalty;
 use App\Models\Property;
 use App\Models\DeveloperMagicLink;
+use App\Events\FinancePenaltyUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -48,21 +49,24 @@ class FinancePenaltyController extends Controller
                     'unitNumber' => $penalty->unit_number,
                     'unitId' => $penalty->unit_id,
                     'description' => $penalty->description,
-                    'documentUrl' => $penalty->document_url,
-                    'documentName' => $penalty->document_name,
+                    'penaltyInitiatedBy' => $penalty->property?->penalty_initiated_by ?? 'admin',
+                    'proofOfPaymentUrl' => $this->stripStorageUrl($penalty->proof_of_payment_url),
+                    'proofOfPaymentName' => $penalty->proof_of_payment_name,
+                    'receiptUrl' => $this->stripStorageUrl($penalty->receipt_url),
+                    'receiptName' => $penalty->receipt_name,
+                    'receiptSentToBuyer' => $penalty->receipt_sent_to_buyer,
+                    'receiptSentToBuyerAt' => $penalty->receipt_sent_to_buyer_at?->format('Y-m-d H:i:s'),
                     'date' => $penalty->created_at->format('Y-m-d'),
                     'notificationSent' => $penalty->notification_sent,
                     'viewedByDeveloper' => $penalty->viewed_by_developer,
                     'viewedByAdmin' => $penalty->viewed_by_admin,
                     'viewedAt' => $penalty->viewed_at?->format('Y-m-d H:i:s'),
-                    'sentToBuyer' => $penalty->sent_to_buyer,
-                    'sentToBuyerAt' => $penalty->sent_to_buyer_at?->format('Y-m-d H:i:s'),
                     'notes' => $penalty->notes,
                     'attachments' => $penalty->attachments->map(function ($att) {
                         return [
                             'id' => $att->id,
                             'fileName' => $att->file_name,
-                            'fileUrl' => $att->file_url,
+                            'fileUrl' => $this->stripStorageUrl($att->file_url),
                             'fileSize' => $att->file_size,
                             'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
                         ];
@@ -84,6 +88,7 @@ class FinancePenaltyController extends Controller
             'unit_number' => 'required|string',
             'description' => 'nullable|string',
             'notes' => 'nullable|string',
+            'proof_of_payment' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240', // For admin-initiated penalties
         ]);
 
         if ($validator->fails()) {
@@ -153,50 +158,56 @@ class FinancePenaltyController extends Controller
                 'unit_id' => $unit->id,
                 'unit_number' => $request->unit_number,
                 'penalty_name' => $request->penalty_name,
-                'amount' => $request->amount,
+                'description' => $request->description,
                 'notes' => $request->notes,
                 'created_by' => Auth::id(),
             ]);
 
+            // If admin-initiated penalty and proof of payment is uploaded, save it
+            if ($penaltyInitiatedBy === 'admin' && $request->hasFile('proof_of_payment')) {
+                $proofDoc = $request->file('proof_of_payment');
+                $fileName = 'Penalty_' . $penalty->penalty_number . '_ProofOfPayment_' . time() . '.' . $proofDoc->getClientOriginalExtension();
+                $storagePath = 'finance/' . $penalty->project_name . '/' . $penalty->unit_number;
+                $proofPath = $proofDoc->storeAs($storagePath, $fileName, 'public');
+                
+                $penalty->proof_of_payment_path = $proofPath;
+                $penalty->proof_of_payment_name = $fileName;
+                $penalty->proof_of_payment_uploaded_at = now();
+                $penalty->save();
+            }
+
             // Send email notification based on who initiated the penalty
-            if ($request->input('send_to_developer') === 'true') {
+            if ($request->input('send_to_developer') === 'true' || $request->input('send_notification') === 'true') {
                 if ($authType === 'developer') {
-                    // If developer creates penalty, notify admin
+                    // Developer creates penalty, notify admin
                     $this->sendPenaltyNotificationToAdmin($penalty, $property);
+                    $penalty->notification_sent = true;
+                    $penalty->notification_sent_at = now();
+                    $penalty->save();
                 } else {
-                    // If admin creates penalty, notify developer
+                    // Admin creates penalty, notify developer
                     $this->sendPenaltyNotificationToDeveloper($penalty);
+                    $penalty->notification_sent = true;
+                    $penalty->notification_sent_at = now();
+                    $penalty->save();
                 }
             }
 
-            $penalty->load('creator:id,full_name,email', 'unit');
+            $penalty->load(['creator:id,full_name,email', 'unit', 'property', 'attachments']);
 
-            $penaltyData = [
-                'id' => $penalty->id,
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'unitId' => $penalty->unit_id,
-                'description' => $penalty->description,
-                'documentUrl' => $penalty->document_url,
-                'documentName' => $penalty->document_name,
-                'date' => $penalty->created_at->format('Y-m-d'),
-                'notificationSent' => $penalty->notification_sent,
-                'viewedByDeveloper' => $penalty->viewed_by_developer,
-                'viewedAt' => $penalty->viewed_at?->format('Y-m-d H:i:s'),
-                'timeline' => $penalty->timeline,
-            ];
+            // Format penalty data for broadcast
+            $penaltyData = $this->formatPenaltyData($penalty);
 
-            broadcast(new \App\Events\FinancePenaltyUpdated($penalty->project_name, 'created', $penaltyData));
+            // Broadcast event
+            broadcast(new FinancePenaltyUpdated($penalty->project_name, 'created', $penaltyData));
 
             return response()->json([
                 'success' => true,
-                'message' => $request->input('send_to_developer') === 'true' 
-                    ? 'Penalty created and notification sent to developer' 
-                    : 'Penalty created successfully',
+                'message' => 'Penalty created successfully',
                 'penalty' => $penaltyData,
             ]);
         } catch (\Exception $e) {
+            Log::error('Failed to create penalty: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create penalty: ' . $e->getMessage(),
@@ -419,25 +430,10 @@ class FinancePenaltyController extends Controller
             $penalty->viewed_at = now();
             $penalty->save();
 
-            $penalty->load('creator:id,full_name,email', 'unit');
+            $penalty->load(['creator:id,full_name,email', 'unit', 'property', 'attachments']);
 
-            $penaltyData = [
-                'id' => $penalty->id,
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'unitId' => $penalty->unit_id,
-                'amount' => (float) $penalty->amount,
-                'description' => $penalty->description,
-                'documentUrl' => $penalty->document_url,
-                'documentName' => $penalty->document_name,
-                'date' => $penalty->created_at->format('Y-m-d'),
-                'notificationSent' => $penalty->notification_sent,
-                'viewedByDeveloper' => $penalty->viewed_by_developer,
-                'viewedByAdmin' => $penalty->viewed_by_admin,
-                'viewedAt' => $penalty->viewed_at?->format('Y-m-d H:i:s'),
-                'timeline' => $penalty->timeline,
-            ];
+            // Format penalty data for broadcast
+            $penaltyData = $this->formatPenaltyData($penalty);
 
             broadcast(new \App\Events\FinancePenaltyUpdated($penalty->project_name, 'viewed', $penaltyData));
 
@@ -613,6 +609,306 @@ class FinancePenaltyController extends Controller
     }
 
     /**
+     * Upload proof of payment (admin only, after developer creates penalty)
+     */
+    public function uploadProofOfPayment(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'proof_of_payment' => 'required|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $penalty = FinancePenalty::with('property')->find($id);
+
+        if (!$penalty) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Penalty not found',
+            ], 404);
+        }
+
+        try {
+            $proofDoc = $request->file('proof_of_payment');
+            $fileName = 'Penalty_' . $penalty->penalty_number . '_ProofOfPayment_' . time() . '.' . $proofDoc->getClientOriginalExtension();
+            $storagePath = 'finance/' . $penalty->project_name . '/' . $penalty->unit_number;
+            
+            // Delete old proof if exists
+            if ($penalty->proof_of_payment_path && Storage::disk('public')->exists($penalty->proof_of_payment_path)) {
+                Storage::disk('public')->delete($penalty->proof_of_payment_path);
+            }
+            
+            $proofPath = $proofDoc->storeAs($storagePath, $fileName, 'public');
+            
+            $penalty->proof_of_payment_path = $proofPath;
+            $penalty->proof_of_payment_name = $fileName;
+            $penalty->proof_of_payment_uploaded_at = now();
+            $penalty->save();
+
+            // Reload with relationships to get updated timeline
+            $penalty->load(['creator:id,full_name,email', 'unit', 'attachments', 'property']);
+
+            // Format penalty data for broadcast
+            $penaltyData = $this->formatPenaltyData($penalty);
+
+            // Broadcast event
+            broadcast(new FinancePenaltyUpdated($penalty->project_name, 'proof-uploaded', $penaltyData));
+
+            // Notify developer about proof of payment upload
+            $this->sendProofUploadedNotificationToDeveloper($penalty);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Proof of payment uploaded successfully',
+                'penalty' => $penaltyData,
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to upload proof of payment: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload proof of payment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Send proof uploaded notification to developer
+     */
+    private function sendProofUploadedNotificationToDeveloper($penalty)
+    {
+        try {
+            $property = $penalty->property;
+            
+            if (!$property || !$property->developer_email) {
+                return;
+            }
+
+            // Create a new magic link for developer access
+            $magicLink = DeveloperMagicLink::create([
+                'project_name' => $penalty->project_name,
+                'email' => $property->developer_email,
+                'token' => bin2hex(random_bytes(32)),
+                'expires_at' => now()->addDays(7),
+            ]);
+
+            $emailData = [
+                'penaltyNumber' => $penalty->penalty_number,
+                'penaltyName' => $penalty->penalty_name,
+                'unitNumber' => $penalty->unit_number,
+                'projectName' => $penalty->project_name,
+                'developerName' => $property->developer_name ?? 'Developer',
+                'proofUrl' => url($penalty->proof_of_payment_url),
+                'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
+            ];
+
+            // Prepare CC emails
+            $ccEmails = [];
+            if ($property->cc_emails) {
+                $ccEmails = array_map('trim', explode(',', $property->cc_emails));
+            }
+
+            Mail::send('emails.penalty-proof-uploaded', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
+                $message->to($property->developer_email)
+                    ->subject("Proof of Payment Uploaded - Action Required: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
+                
+                if (!empty($ccEmails)) {
+                    $message->cc($ccEmails);
+                }
+            });
+
+        } catch (\Exception $e) {
+            Log::error("Failed to send proof uploaded notification to developer: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Upload receipt (developer only, after admin uploads proof of payment)
+     */
+    public function uploadReceipt(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'receipt' => 'required|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $penalty = FinancePenalty::with('property')->find($id);
+
+        if (!$penalty) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Penalty not found',
+            ], 404);
+        }
+
+        try {
+            $receiptDoc = $request->file('receipt');
+            $fileName = 'Penalty_' . $penalty->penalty_number . '_Receipt_' . time() . '.' . $receiptDoc->getClientOriginalExtension();
+            $storagePath = 'finance/' . $penalty->project_name . '/' . $penalty->unit_number;
+            
+            // Delete old receipt if exists
+            if ($penalty->receipt_path && Storage::disk('public')->exists($penalty->receipt_path)) {
+                Storage::disk('public')->delete($penalty->receipt_path);
+            }
+            
+            $receiptPath = $receiptDoc->storeAs($storagePath, $fileName, 'public');
+            
+            $penalty->receipt_path = $receiptPath;
+            $penalty->receipt_name = $fileName;
+            $penalty->receipt_uploaded_at = now();
+            $penalty->save();
+
+            // Reload with relationships to get updated timeline
+            $penalty->load(['creator:id,full_name,email', 'unit', 'attachments', 'property']);
+
+            // Format penalty data for broadcast
+            $penaltyData = $this->formatPenaltyData($penalty);
+
+            // Broadcast event
+            broadcast(new FinancePenaltyUpdated($penalty->project_name, 'receipt-uploaded', $penaltyData));
+
+            // Notify admin about receipt upload
+            $this->sendReceiptUploadedNotificationToAdmin($penalty);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Receipt uploaded successfully. Admin has been notified.',
+                'penalty' => $penaltyData,
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to upload receipt: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload receipt: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Send receipt uploaded notification to admin
+     */
+    private function sendReceiptUploadedNotificationToAdmin($penalty)
+    {
+        try {
+            $property = $penalty->property;
+            
+            if (!$property) {
+                return;
+            }
+
+            $emailData = [
+                'penaltyNumber' => $penalty->penalty_number,
+                'penaltyName' => $penalty->penalty_name,
+                'unitNumber' => $penalty->unit_number,
+                'projectName' => $penalty->project_name,
+                'receiptUrl' => url($penalty->receipt_url),
+            ];
+
+            // Send to admin email or configured emails
+            $adminEmail = env('ADMIN_EMAIL', 'admin@zedcapital.com');
+
+            Mail::send('emails.penalty-receipt-uploaded', $emailData, function ($message) use ($penalty, $adminEmail) {
+                $message->to($adminEmail)
+                    ->subject("Penalty Receipt Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
+            });
+
+        } catch (\Exception $e) {
+            Log::error("Failed to send receipt uploaded notification to admin: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send receipt to buyer via finance email
+     */
+    public function sendReceiptToBuyer(Request $request, $id)
+    {
+        $penalty = FinancePenalty::with(['unit.primaryFinanceEmail', 'property'])->find($id);
+
+        if (!$penalty) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Penalty not found',
+            ], 404);
+        }
+
+        if (!$penalty->receipt_path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Receipt has not been uploaded yet',
+            ], 400);
+        }
+
+        try {
+            // Get buyer email from unit finance emails
+            $buyerEmail = null;
+            $buyerName = 'Buyer';
+
+            if ($penalty->unit && $penalty->unit->primaryFinanceEmail) {
+                $financeEmail = $penalty->unit->primaryFinanceEmail;
+                $buyerEmail = $financeEmail->email;
+                $buyerName = $financeEmail->recipient_name ?? 'Buyer';
+            }
+
+            if (!$buyerEmail) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No buyer email found for this unit',
+                ], 400);
+            }
+
+            $emailData = [
+                'penaltyNumber' => $penalty->penalty_number,
+                'penaltyName' => $penalty->penalty_name,
+                'unitNumber' => $penalty->unit_number,
+                'projectName' => $penalty->project_name,
+                'buyerName' => $buyerName,
+                'receiptUrl' => url($penalty->receipt_url),
+            ];
+
+            Mail::send('emails.penalty-receipt-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
+                $message->to($buyerEmail)
+                    ->subject("Penalty Payment Receipt: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
+            });
+
+            $penalty->receipt_sent_to_buyer = true;
+            $penalty->receipt_sent_to_buyer_at = now();
+            $penalty->receipt_sent_to_buyer_email = $buyerEmail;
+            $penalty->save();
+
+            // Reload with relationships to get updated timeline
+            $penalty->load(['creator:id,full_name,email', 'unit', 'attachments', 'property']);
+
+            // Format penalty data for broadcast
+            $penaltyData = $this->formatPenaltyData($penalty);
+
+            // Broadcast event
+            broadcast(new FinancePenaltyUpdated($penalty->project_name, 'receipt-sent-to-buyer', $penaltyData));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Receipt sent to buyer successfully',
+                'penalty' => $penaltyData,
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to send receipt to buyer: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send receipt to buyer: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Send penalty document to buyer via finance email
      */
     public function sendToBuyer(Request $request, $id)
@@ -762,7 +1058,7 @@ class FinancePenaltyController extends Controller
             $attachment = $penalty->attachments()->findOrFail($attachmentId);
             
             // Delete file from storage
-            \Storage::disk('public')->delete($attachment->file_path);
+            Storage::disk('public')->delete($attachment->file_path);
             
             // Delete database record
             $attachment->delete();
@@ -818,5 +1114,61 @@ class FinancePenaltyController extends Controller
         } catch (\Exception $e) {
             Log::error("Failed to send penalty notification to admin: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Format penalty data for broadcast/response
+     */
+    private function formatPenaltyData($penalty)
+    {
+        // Ensure relationships are loaded
+        $penalty->loadMissing(['property', 'attachments']);
+
+        return [
+            'id' => $penalty->id,
+            'penaltyNumber' => $penalty->penalty_number,
+            'penaltyName' => $penalty->penalty_name,
+            'unitNumber' => $penalty->unit_number,
+            'unitId' => $penalty->unit_id,
+            'description' => $penalty->description,
+            'penaltyInitiatedBy' => $penalty->property?->penalty_initiated_by ?? 'admin',
+            'proofOfPaymentUrl' => $this->stripStorageUrl($penalty->proof_of_payment_url),
+            'proofOfPaymentName' => $penalty->proof_of_payment_name,
+            'receiptUrl' => $this->stripStorageUrl($penalty->receipt_url),
+            'receiptName' => $penalty->receipt_name,
+            'receiptSentToBuyer' => $penalty->receipt_sent_to_buyer,
+            'receiptSentToBuyerAt' => $penalty->receipt_sent_to_buyer_at?->format('Y-m-d H:i:s'),
+            'date' => $penalty->created_at->format('Y-m-d'),
+            'notificationSent' => $penalty->notification_sent,
+            'viewedByDeveloper' => $penalty->viewed_by_developer,
+            'viewedByAdmin' => $penalty->viewed_by_admin,
+            'viewedAt' => $penalty->viewed_at?->format('Y-m-d H:i:s'),
+            'notes' => $penalty->notes,
+            'attachments' => $penalty->attachments->map(function ($att) {
+                return [
+                    'id' => $att->id,
+                    'fileName' => $att->file_name,
+                    'fileUrl' => $this->stripStorageUrl($att->file_url),
+                    'fileSize' => $att->file_size,
+                    'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                ];
+            }),
+            'timeline' => $penalty->timeline,
+        ];
+    }
+
+    /**
+     * Strip the storage URL prefix to return only the relative path
+     */
+    private function stripStorageUrl($url)
+    {
+        if (empty($url)) {
+            return null;
+        }
+
+        // Remove http://localhost/storage/ or any other domain/storage/ prefix
+        $url = preg_replace('#^https?://[^/]+/storage/#', '', $url);
+        
+        return $url;
     }
 }

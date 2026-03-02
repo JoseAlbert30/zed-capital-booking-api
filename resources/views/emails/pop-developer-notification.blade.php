@@ -1,32 +1,58 @@
-<x-mail::message>
-# New Payment Received - {{ $pop->pop_number }}
+@extends('emails.layouts.master')
 
-Dear {{ $magicLink->developer_name ?? 'Developer' }},
+@section('content')
+<div class="greeting">
+    Dear {{ $magicLink->developer_name ?? 'Developer' }},
+</div>
 
-We have received a new proof of payment for **{{ $pop->project_name }}**.
+<div class="message-body">
+    We have received a new proof of payment for <strong>{{ $pop->project_name }}</strong>. Please review and process this payment at your earliest convenience.
+</div>
 
-## Payment Details
+<div class="info-box">
+    <h3>Payment Details</h3>
+    <div class="info-row">
+        <span class="info-label">POP Number:</span>
+        <span class="info-value">{{ $pop->pop_number }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Unit Number:</span>
+        <span class="info-value">{{ $pop->unit_number }}</span>
+    </div>
+    @if(isset($pop->amount))
+    <div class="info-row">
+        <span class="info-label">Amount:</span>
+        <span class="info-value">AED {{ number_format($pop->amount, 2) }}</span>
+    </div>
+    @endif
+    <div class="info-row">
+        <span class="info-label">Date Received:</span>
+        <span class="info-value">{{ $pop->created_at->format('F d, Y') }}</span>
+    </div>
+</div>
 
-- **POP Number:** {{ $pop->pop_number }}
-- **Unit Number:** {{ $pop->unit_number }}
-- **Amount:** AED {{ number_format($pop->amount, 2) }}
-- **Date Received:** {{ $pop->created_at->format('F d, Y') }}
+<div class="divider"></div>
 
-## Next Steps
+<div class="message-body">
+    <strong>Next Steps:</strong> Please access the developer portal to review the proof of payment document and upload the official receipt for the buyer.
+</div>
 
-Please access the developer portal to review the proof of payment and upload the official receipt.
+<div class="button-container">
+    <a href="{{ $portalUrl }}" class="button">Access Developer Portal</a>
+</div>
 
-<x-mail::button :url="$portalUrl" color="success">
-Access Developer Portal
-</x-mail::button>
+<div class="note-box">
+    <h4>Important Information</h4>
+    <ul>
+        <li>This secure link is valid for 90 days from the date of this email</li>
+        <li>You can upload receipts for all pending POPs in this project</li>
+        <li>No password required - click the link to access directly</li>
+        <li>The link provides secure, one-time access to the developer portal</li>
+    </ul>
+</div>
 
-**Important Notes:**
-- This link is valid for 90 days from the date of this email
-- You can upload receipts for all pending POPs in this project
-- The link provides secure access without requiring a password
-
-If you have any questions, please contact our finance team.
-
-Best regards,<br>
-{{ config('app.name') }} - Finance Department
-</x-mail::message>
+<div class="signature">
+    <strong>Zed Capital - Finance Department</strong>
+    For any questions or assistance, please contact our finance team.
+</div>
+@endsection
