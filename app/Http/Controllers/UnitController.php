@@ -86,8 +86,42 @@ class UnitController extends Controller
             if ($request->has('handover_requirements') && $request->handover_requirements !== 'all') {
                 if ($request->handover_requirements === 'complete') {
                     $query->where('handover_ready', true);
-                } elseif ($request->handover_requirements === 'incomplete') {
+                } elseif ($request->handover_requirements === 'incomplete' || $request->handover_requirements === 'missing') {
+                    // 'incomplete' and 'missing' are treated the same (handover_ready = false)
                     $query->where('handover_ready', false);
+                }
+            }
+
+            // Filter by client requirements completion (5-6 client-submitted requirements)
+            if ($request->has('client_requirements') && $request->client_requirements !== 'all') {
+                if ($request->client_requirements === 'complete') {
+                    // Client has completed their 5-6 requirements
+                    // This checks if the unit has all required client attachments
+                    // Required: payment_proof, ac_connection, dewa_connection, service_charge_ack_buyer, finance_clearance
+                    // Optional 6th: bank_noc (if has_mortgage)
+                    $query->whereHas('attachments', function($q) {
+                        $q->whereIn('type', ['payment_proof', 'ac_connection', 'dewa_connection', 'service_charge_ack_buyer', 'finance_clearance']);
+                    }, '>=', 5);
+                } elseif ($request->client_requirements === 'incomplete') {
+                    // Client has not completed all requirements
+                    $query->where(function($q) {
+                        $q->whereHas('attachments', function($subQ) {
+                            $subQ->whereIn('type', ['payment_proof', 'ac_connection', 'dewa_connection', 'service_charge_ack_buyer', 'finance_clearance']);
+                        }, '<', 5);
+                    });
+                }
+            }
+
+            // Filter by developer NOC status
+            if ($request->has('developer_noc') && $request->developer_noc !== 'all') {
+                if ($request->developer_noc === 'uploaded') {
+                    $query->whereHas('attachments', function($q) {
+                        $q->where('type', 'developer_noc_signed');
+                    });
+                } elseif ($request->developer_noc === 'missing') {
+                    $query->whereDoesntHave('attachments', function($q) {
+                        $q->where('type', 'developer_noc_signed');
+                    });
                 }
             }
 
@@ -197,6 +231,50 @@ class UnitController extends Controller
         }
     }
 
+    /**
+     * Get counts for handover tabs
+     */
+    public function getTabCounts(Request $request)
+    {
+        try {
+            $counts = [
+                'all' => Unit::whereHas('users')->count(),
+                'pending' => Unit::whereHas('users')
+                    ->where('handover_status', 'pending')
+                    ->count(),
+                'completed' => Unit::whereHas('users')
+                    ->where('handover_status', 'completed')
+                    ->count(),
+                'developer_approval' => Unit::whereHas('users')
+                    // Client has completed their requirements (5+ docs)
+                    ->whereHas('attachments', function($q) {
+                        $q->whereIn('type', ['payment_proof', 'ac_connection', 'dewa_connection', 'service_charge_ack_buyer', 'finance_clearance']);
+                    }, '>=', 5)
+                    // But developer NOC has not been uploaded yet
+                    ->whereDoesntHave('attachments', function($q) {
+                        $q->where('type', 'developer_noc_signed');
+                    })
+                    ->count(),
+                'for_schedule' => Unit::whereHas('users')
+                    ->where('handover_ready', true)
+                    ->whereDoesntHave('booking')
+                    ->count(),
+                'bookings' => \App\Models\Booking::count(),
+                'remarks' => DB::table('unit_remarks')->count(),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'counts' => $counts
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch tab counts',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
     /**
      * Get a single unit by ID with all related data.
      */

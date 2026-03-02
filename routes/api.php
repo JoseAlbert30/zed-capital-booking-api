@@ -93,6 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('units')->group(function () {
         Route::get('/', [UnitController::class, 'index']);
+        Route::get('/tab-counts', [UnitController::class, 'getTabCounts']);
         Route::get('/by-project', [UnitController::class, 'getUnitsByProject']);
         Route::post('/', [UnitController::class, 'store']);
         Route::post('/bulk', [UnitController::class, 'bulkUpload']);
