@@ -2890,6 +2890,7 @@ class UnitController extends Controller
                         'vantage@zedcapital.ae',
                         'docs@zedcapital.ae',
                         'accounts@zedcapital.ae',
+                        'maliahelp3@gmail.com',
                         'finance@zedcapital.ae',
                         'clientsupport@zedcapital.ae',
                         'operations@zedcapital.ae',
