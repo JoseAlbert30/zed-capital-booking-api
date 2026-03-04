@@ -2763,6 +2763,7 @@ class UnitController extends Controller
                     ->cc([
                         'vantage@zedcapital.ae',
                         'docs@zedcapital.ae',
+                        'info@evanlimpenta.com',
                         'Shahid@evanlimpenta.com',
                         'maliahelp3@gmail.com',
                         'accounts@zedcapital.ae',
