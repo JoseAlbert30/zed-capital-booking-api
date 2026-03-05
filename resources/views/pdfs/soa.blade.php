@@ -380,7 +380,13 @@
                 @if($unit->pdc_count !== null)
                 <tr>
                     <td style="padding-left: 20px; font-size: 8pt; color: #666;">Number of PDCs</td>
-                    <td class="text-right" style="font-size: 8pt; color: #666;">{{ $unit->pdc_count }}</td>
+                    <td class="text-right" style="font-size: 8pt; color: #666;">
+                        @if($unit->pdc_count === 'pending' || $unit->pdc_count == 0)
+                            pending
+                        @else
+                            {{ $unit->pdc_count }}
+                        @endif
+                    </td>
                 </tr>
                 @endif
                 @endif
@@ -412,11 +418,11 @@
     <div class="summary-box">
         <div class="summary-row">
             <div class="summary-label">Payment Status:</div>
-            <div class="summary-amount" style="color: {{ abs($unit->due_after_completion) > 0 ? '#dc3545' : '#28a745' }};">
-                @if($unit->due_after_completion > 0)
-                    BALANCE DUE AFTER COMPLETION
-                @elseif($unit->due_after_completion < 0 && $unit->pdc_in_hand > 0)
+            <div class="summary-amount" style="color: {{ ($unit->pdc_in_hand !== null && $unit->pdc_in_hand > 0) ? '#17a2b8' : (abs($unit->due_after_completion) > 0 ? '#dc3545' : '#28a745') }};">
+                @if($unit->pdc_in_hand !== null && $unit->pdc_in_hand > 0)
                     PDC IN HAND
+                @elseif($unit->due_after_completion > 0)
+                    BALANCE DUE AFTER COMPLETION
                 @elseif($unit->due_after_completion < 0)
                     OVERPAID
                 @else
@@ -425,17 +431,17 @@
             </div>
         </div>
         
-        @if($unit->due_after_completion > 0)
-        <div class="summary-row">
-            <div class="summary-label">Amount Due After Completion:</div>
-            <div class="summary-amount" style="color: #dc3545;">
-                AED {{ number_format(abs($unit->due_after_completion), 2) }}
-            </div>
-        </div>
-        @elseif($unit->due_after_completion < 0 && $unit->pdc_in_hand > 0)
+        @if($unit->pdc_in_hand !== null && $unit->pdc_in_hand > 0)
         <div class="summary-row">
             <div class="summary-label">PDC Amount:</div>
             <div class="summary-amount" style="color: #17a2b8;">
+                AED {{ number_format($unit->pdc_in_hand, 2) }}
+            </div>
+        </div>
+        @elseif($unit->due_after_completion > 0)
+        <div class="summary-row">
+            <div class="summary-label">Amount Due After Completion:</div>
+            <div class="summary-amount" style="color: #dc3545;">
                 AED {{ number_format(abs($unit->due_after_completion), 2) }}
             </div>
         </div>

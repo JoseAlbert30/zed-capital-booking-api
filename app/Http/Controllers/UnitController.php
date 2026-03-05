@@ -1183,6 +1183,12 @@ class UnitController extends Controller
             'outstanding_amount' => 'nullable|numeric',
             'upon_completion_amount' => 'nullable|numeric',
             'due_after_completion' => 'nullable|numeric',
+            'pdc_in_hand' => 'nullable|numeric',
+            'pdc_count' => ['nullable', function($attribute, $value, $fail) {
+                if ($value !== null && $value !== 'pending' && !is_numeric($value)) {
+                    $fail('The '.$attribute.' must be a number or "pending".');
+                }
+            }],
             'has_pho' => 'nullable|boolean',
         ]);
 
@@ -1199,6 +1205,8 @@ class UnitController extends Controller
                 'outstanding_amount' => $request->outstanding_amount,
                 'upon_completion_amount' => $request->upon_completion_amount,
                 'due_after_completion' => $request->due_after_completion,
+                'pdc_in_hand' => $request->pdc_in_hand,
+                'pdc_count' => $request->pdc_count,
                 'has_pho' => $request->has_pho ?? false,
             ]);
 
@@ -1227,6 +1235,12 @@ class UnitController extends Controller
             'outstanding_amount' => 'nullable|numeric',
             'upon_completion_amount' => 'nullable|numeric',
             'due_after_completion' => 'nullable|numeric',
+            'pdc_in_hand' => 'nullable|numeric',
+            'pdc_count' => ['nullable', function($attribute, $value, $fail) {
+                if ($value !== null && $value !== 'pending' && !is_numeric($value)) {
+                    $fail('The '.$attribute.' must be a number or "pending".');
+                }
+            }],
             'has_pho' => 'nullable|boolean',
         ]);
 
@@ -1243,6 +1257,8 @@ class UnitController extends Controller
                 'outstanding_amount' => $request->outstanding_amount,
                 'upon_completion_amount' => $request->upon_completion_amount,
                 'due_after_completion' => $request->due_after_completion,
+                'pdc_in_hand' => $request->pdc_in_hand,
+                'pdc_count' => $request->pdc_count,
                 'has_pho' => $request->has_pho ?? false,
             ]);
 
