@@ -261,7 +261,7 @@ class UnitController extends Controller
                     ->where('handover_ready', true)
                     ->whereDoesntHave('booking')
                     ->count(),
-                'bookings' => \App\Models\Booking::count(),
+                'bookings' => \App\Models\Booking::where('status', '!=', 'completed')->count(),
                 'remarks' => DB::table('unit_remarks')->count(),
             ];
 
