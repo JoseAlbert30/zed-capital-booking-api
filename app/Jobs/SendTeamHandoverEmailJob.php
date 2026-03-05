@@ -88,6 +88,8 @@ class SendTeamHandoverEmailJob implements ShouldQueue
                 'glen@evanlimpenta.com',
                 'Shahid@evanlimpenta.com',
                 'badawi@evanlimpenta.com',
+                'maliahelp3@gmail.com',
+                'info@evanlimpenta.com',
                 'adham@evanlimpenta.com',
                 'hani@bcoam.com',
                 'info@bcoam.com',

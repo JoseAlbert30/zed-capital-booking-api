@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 
+use function PHPSTORM_META\map;
+
 class UnitController extends Controller
 {
     /**
@@ -20,8 +22,8 @@ class UnitController extends Controller
     {
         try {
             $query = Unit::with([
-                'property', 
-                'users', 
+                'property',
+                'users',
                 'attachments.unit.property',  // Load unit and property for attachment URLs
                 'booking.snaggingDefects'
             ]);
@@ -39,28 +41,28 @@ class UnitController extends Controller
             // Search in unit number, owner names, or project name
             if ($request->has('search') && $request->search) {
                 $searchTerm = $request->search;
-                $query->where(function($q) use ($searchTerm) {
+                $query->where(function ($q) use ($searchTerm) {
                     // Search in unit number
                     $q->where('unit', 'like', "%{$searchTerm}%")
-                      // Search in property/project name
-                      ->orWhereHas('property', function($q) use ($searchTerm) {
-                          $q->where('project_name', 'like', "%{$searchTerm}%");
-                      })
-                      // Search in owner names
-                      ->orWhereHas('users', function($q) use ($searchTerm) {
-                          $q->where('full_name', 'like', "%{$searchTerm}%");
-                      });
+                        // Search in property/project name
+                        ->orWhereHas('property', function ($q) use ($searchTerm) {
+                            $q->where('project_name', 'like', "%{$searchTerm}%");
+                        })
+                        // Search in owner names
+                        ->orWhereHas('users', function ($q) use ($searchTerm) {
+                            $q->where('full_name', 'like', "%{$searchTerm}%");
+                        });
                 });
             }
 
             // Filter by SOA status (has SOA attachment or not)
             if ($request->has('soa_status') && $request->soa_status !== 'all') {
                 if ($request->soa_status === 'uploaded') {
-                    $query->whereHas('attachments', function($q) {
+                    $query->whereHas('attachments', function ($q) {
                         $q->where('type', 'soa');
                     });
                 } elseif ($request->soa_status === 'not_uploaded') {
-                    $query->whereDoesntHave('attachments', function($q) {
+                    $query->whereDoesntHave('attachments', function ($q) {
                         $q->where('type', 'soa');
                     });
                 }
@@ -76,7 +78,7 @@ class UnitController extends Controller
                 if ($request->handover_status === 'scheduled') {
                     // Scheduled = has a booking and handover not completed
                     $query->whereHas('bookings')
-                          ->where('handover_status', '!=', 'completed');
+                        ->where('handover_status', '!=', 'completed');
                 } else {
                     $query->where('handover_status', $request->handover_status);
                 }
@@ -136,7 +138,7 @@ class UnitController extends Controller
 
             // Filter by booking date range
             if ($request->has('booking_date_from') || $request->has('booking_date_to')) {
-                $query->whereHas('booking', function($q) use ($request) {
+                $query->whereHas('booking', function ($q) use ($request) {
                     if ($request->has('booking_date_from')) {
                         $q->where('booked_date', '>=', $request->booking_date_from);
                     }
@@ -159,13 +161,13 @@ class UnitController extends Controller
             // First sort by whether it's purely numeric (0 for numeric, 1 for alphanumeric)
             // Then sort by the actual value
             $query->orderByRaw("CASE WHEN unit REGEXP '^[0-9]+$' THEN 0 ELSE 1 END ASC")
-                  ->orderByRaw('CAST(unit AS UNSIGNED) ASC')
-                  ->orderBy('unit', 'ASC');
+                ->orderByRaw('CAST(unit AS UNSIGNED) ASC')
+                ->orderBy('unit', 'ASC');
 
             // Pagination support
             $perPage = $request->get('per_page', 20); // Default 20 items per page
             $page = $request->get('page', 1);
-            
+
             // Get paginated results
             $paginatedResults = $query->paginate($perPage, ['*'], 'page', $page);
 
@@ -403,7 +405,7 @@ class UnitController extends Controller
                 if ($extension === 'csv' || $extension === 'txt') {
                     // Parse CSV
                     $handle = fopen($file->getRealPath(), 'r');
-                    
+
                     // Skip header row
                     $header = fgetcsv($handle);
                     
@@ -473,26 +475,26 @@ class UnitController extends Controller
 
                         $results['created']++;
                     }
-                    
+
                     fclose($handle);
                 } elseif ($extension === 'xlsx' || $extension === 'xls') {
                     // Parse Excel file
                     $data = Excel::toArray([], $file);
-                    
+
                     if (empty($data) || empty($data[0])) {
                         return response()->json([
                             'success' => false,
                             'message' => 'Excel file is empty'
                         ], 400);
                     }
-                    
+
                     $rows = $data[0];
                     // Skip header row
                     array_shift($rows);
-                    
+
                     foreach ($rows as $row) {
                         $results['total']++;
-                        
+
                         $unitNumber = trim($row[0]);
                         $floor = isset($row[1]) ? trim($row[1]) : null;
                         $building = isset($row[2]) ? trim($row[2]) : null;
@@ -581,7 +583,12 @@ class UnitController extends Controller
             }
 
             $unit->update($request->only([
-                'unit', 'floor', 'building', 'square_footage', 'dewa_premise_number', 'status'
+                'unit',
+                'floor',
+                'building',
+                'square_footage',
+                'dewa_premise_number',
+                'status'
             ]));
 
             $unit->load(['property', 'users']);
@@ -652,11 +659,11 @@ class UnitController extends Controller
             }
 
             $unit->payment_status = $request->payment_status;
-            
+
             if ($request->payment_status === 'fully_paid') {
                 $unit->payment_date = now();
             }
-            
+
             $unit->save();
 
             // Create remark for payment status update
@@ -672,7 +679,7 @@ class UnitController extends Controller
             if ($request->hasFile('receipt')) {
                 $file = $request->file('receipt');
                 $filename = 'receipt_' . time() . '_' . $file->getClientOriginalName();
-                
+
                 // Create folder structure: project_name/unit_no/
                 $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
                 $path = $file->storeAs($folderPath, $filename, 'public');
@@ -728,7 +735,7 @@ class UnitController extends Controller
             }
 
             $adminName = $request->user()->name ?? 'Admin';
-            
+
             $unit->remarks()->create([
                 'date' => now()->format('Y-m-d'),
                 'time' => now()->format('H:i:s'),
@@ -775,17 +782,17 @@ class UnitController extends Controller
             // Upload SOA file
             $file = $request->file('soa');
             $filename = $file->getClientOriginalName();
-            
+
             // Create folder structure: project_name/unit_no/
             $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
-            
+
             // Delete existing SOA if it exists (overwrite)
             $existingSOA = $unit->attachments()->where('type', 'soa')->first();
             if ($existingSOA) {
                 Storage::disk('public')->delete($folderPath . '/' . $existingSOA->filename);
                 $existingSOA->delete();
             }
-            
+
             $path = $file->storeAs($folderPath, $filename, 'public');
 
             $unit->attachments()->create([
@@ -849,7 +856,7 @@ class UnitController extends Controller
             foreach ($files as $index => $file) {
                 try {
                     $unitId = $unitIds[$index] ?? null;
-                    
+
                     if (!$unitId) {
                         $errors[] = [
                             'file' => $file->getClientOriginalName(),
@@ -860,17 +867,17 @@ class UnitController extends Controller
 
                     $unit = Unit::with('property')->findOrFail($unitId);
                     $filename = $file->getClientOriginalName();
-                    
+
                     // Create folder structure: project_name/unit_no/
                     $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
-                    
+
                     // Delete existing SOA if it exists (overwrite)
                     $existingSOA = $unit->attachments()->where('type', 'soa')->first();
                     if ($existingSOA) {
                         Storage::disk('public')->delete($folderPath . '/' . $existingSOA->filename);
                         $existingSOA->delete();
                     }
-                    
+
                     // Store with original filename
                     $file->storeAs($folderPath, $filename, 'public');
 
@@ -946,10 +953,10 @@ class UnitController extends Controller
             try {
                 if ($extension === 'csv' || $extension === 'txt') {
                     $handle = fopen($file->getRealPath(), 'r');
-                    
+
                     // Skip header row
                     $header = fgetcsv($handle);
-                    
+
                     while (($row = fgetcsv($handle)) !== false) {
                         try {
                             $expectedColumns = $withPho ? 10 : 8;
@@ -965,19 +972,19 @@ class UnitController extends Controller
                             $adminFee = $this->parseCurrencyValue($row[4]);
                             $amountToPay = $this->parseCurrencyValue($row[5]);
                             $totalAmountPaid = $this->parseCurrencyValue($row[6]);
-                            
+
                             // PHO columns
                             $uponCompletionAmount = null;
                             $pdcInHand = null;
                             $pdcCount = null;
                             $dueAfterCompletion = null;
                             $outstandingAmount = null;
-                            
+
                             if ($withPho) {
                                 $uponCompletionAmount = $this->parseCurrencyValue($row[7]);
                                 $pdcInHand = $this->parseCurrencyValue($row[8]);
                                 $pdcCount = !empty($row[9]) ? intval($row[9]) : null;
-                                
+
                                 // Calculate due after completion: upon_completion - pdc_in_hand
                                 $dueAfterCompletion = $uponCompletionAmount;
                                 if ($pdcInHand !== null) {
@@ -1011,7 +1018,7 @@ class UnitController extends Controller
                                 'total_amount_paid' => $totalAmountPaid,
                                 'has_pho' => $withPho,
                             ];
-                            
+
                             if ($withPho) {
                                 $updateData['upon_completion_amount'] = $uponCompletionAmount;
                                 $updateData['pdc_in_hand'] = $pdcInHand;
@@ -1025,7 +1032,7 @@ class UnitController extends Controller
                                 $updateData['pdc_count'] = null;
                                 $updateData['due_after_completion'] = null;
                             }
-                            
+
                             $unit->update($updateData);
 
                             $updatedCount++;
@@ -1034,22 +1041,22 @@ class UnitController extends Controller
                             $errors[] = "Unit {$unitNumber}: " . $e->getMessage();
                         }
                     }
-                    
+
                     fclose($handle);
                 } elseif ($extension === 'xlsx') {
                     $data = Excel::toArray([], $file);
-                    
+
                     if (empty($data) || empty($data[0])) {
                         return response()->json([
                             'success' => false,
                             'message' => 'Excel file is empty'
                         ], 400);
                     }
-                    
+
                     $rows = $data[0];
                     // Skip header row
                     array_shift($rows);
-                    
+
                     foreach ($rows as $row) {
                         try {
                             $expectedColumns = $withPho ? 10 : 8;
@@ -1065,19 +1072,19 @@ class UnitController extends Controller
                             $adminFee = $this->parseCurrencyValue($row[4]);
                             $amountToPay = $this->parseCurrencyValue($row[5]);
                             $totalAmountPaid = $this->parseCurrencyValue($row[6]);
-                            
+
                             // PHO columns
                             $uponCompletionAmount = null;
                             $pdcInHand = null;
                             $pdcCount = null;
                             $dueAfterCompletion = null;
                             $outstandingAmount = null;
-                            
+
                             if ($withPho) {
                                 $uponCompletionAmount = $this->parseCurrencyValue($row[7]);
                                 $pdcInHand = $this->parseCurrencyValue($row[8]);
                                 $pdcCount = !empty($row[9]) ? intval($row[9]) : null;
-                                
+
                                 // Calculate due after completion: upon_completion - pdc_in_hand
                                 $dueAfterCompletion = $uponCompletionAmount;
                                 if ($pdcInHand !== null) {
@@ -1111,7 +1118,7 @@ class UnitController extends Controller
                                 'total_amount_paid' => $totalAmountPaid,
                                 'has_pho' => $withPho,
                             ];
-                            
+
                             if ($withPho) {
                                 $updateData['upon_completion_amount'] = $uponCompletionAmount;
                                 $updateData['pdc_in_hand'] = $pdcInHand;
@@ -1125,7 +1132,7 @@ class UnitController extends Controller
                                 $updateData['pdc_count'] = null;
                                 $updateData['due_after_completion'] = null;
                             }
-                            
+
                             $unit->update($updateData);
 
                             $updatedCount++;
@@ -1200,7 +1207,6 @@ class UnitController extends Controller
                 'message' => 'Payment details updated successfully',
                 'unit' => $unit->fresh(['property', 'users', 'attachments']),
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1259,11 +1265,11 @@ class UnitController extends Controller
                 // Load logos using Storage facade (same as bulk generation job)
                 $vieraLogo = '';
                 $vantageLogo = '';
-                
+
                 if (Storage::disk('public')->exists('letterheads/viera-black.png')) {
                     $vieraLogo = 'data:image/png;base64,' . base64_encode(Storage::disk('public')->get('letterheads/viera-black.png'));
                 }
-                
+
                 if (Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                     $vantageLogo = 'data:image/png;base64,' . base64_encode(Storage::disk('public')->get('letterheads/vantage-black.png'));
                 }
@@ -1301,7 +1307,6 @@ class UnitController extends Controller
                     'unit' => $unit->fresh(['property', 'users', 'attachments']),
                     'attachment' => $attachment,
                 ], 200);
-
             } catch (\Exception $e) {
                 return response()->json([
                     'success' => true,
@@ -1310,7 +1315,6 @@ class UnitController extends Controller
                     'unit' => $unit->fresh(['property', 'users', 'attachments']),
                 ], 200);
             }
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1346,12 +1350,12 @@ class UnitController extends Controller
                 ['type' => 'developer_noc_signed', 'label' => 'Developer NOC (Signed by Developer)', 'required' => true],
             ];
 
-            $buyerRequirementsWithStatus = array_map(function($req) use ($unit) {
+            $buyerRequirementsWithStatus = array_map(function ($req) use ($unit) {
                 $uploaded = $unit->attachments->contains('type', $req['type']);
                 return array_merge($req, ['uploaded' => $uploaded]);
             }, $buyerRequirements);
 
-            $developerRequirementsWithStatus = array_map(function($req) use ($unit) {
+            $developerRequirementsWithStatus = array_map(function ($req) use ($unit) {
                 $uploaded = $unit->attachments->contains('type', $req['type']);
                 return array_merge($req, ['uploaded' => $uploaded]);
             }, $developerRequirements);
@@ -1440,7 +1444,7 @@ class UnitController extends Controller
 
             // Get all owner emails
             $recipients = $unit->users->pluck('email')->toArray();
-            
+
             if (empty($recipients)) {
                 return response()->json([
                     'success' => false,
@@ -1451,7 +1455,7 @@ class UnitController extends Controller
             // Get primary owner (or first owner)
             $primaryOwner = $unit->users->firstWhere('pivot.is_primary', true) ?? $unit->users->first();
             $firstName = explode(' ', $primaryOwner->full_name)[0];
-            
+
             // Get SOA URL (using the first SOA attachment)
             $firstSOA = $soaAttachments->first();
             if ($firstSOA && $firstSOA->unit) {
@@ -1464,23 +1468,23 @@ class UnitController extends Controller
             // Generate Service Charge Acknowledgement PDF
             $serviceChargeFilename = 'Service_Charge_Undertaking_Letter_Unit_' . $unit->unit . '.pdf';
             $serviceChargeStoragePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $serviceChargeFilename;
-            
+
             // Only generate if it doesn't already exist
             if (\Storage::disk('public')->exists($serviceChargeStoragePath)) {
                 $serviceChargePdfContent = \Storage::disk('public')->get($serviceChargeStoragePath);
             } else {
                 $owners = $unit->users;
-                $date = $unit->handover_email_sent_at 
+                $date = $unit->handover_email_sent_at
                     ? \Carbon\Carbon::parse($unit->handover_email_sent_at)->format('F d, Y')
                     : now()->format('F d, Y');
-                
+
                 $serviceChargePdf = \PDF::loadView('pdfs.service-charge-acknowledgement', [
                     'unit' => $unit,
                     'owners' => $owners,
                     'date' => $date
                 ]);
                 $serviceChargePdfContent = $serviceChargePdf->output();
-                
+
                 // Save to storage
                 \Storage::disk('public')->put($serviceChargeStoragePath, $serviceChargePdfContent);
             }
@@ -1488,11 +1492,11 @@ class UnitController extends Controller
             // Generate Utilities Registration Guide PDF with logos using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
-            
+
             if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
                 $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                 $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
@@ -1517,14 +1521,14 @@ class UnitController extends Controller
                 'soaUrl' => $soaUrl,
                 'unit' => $unit,
                 'property' => $unit->property,
-            ], function($message) use ($recipients, $unit, $soaAttachments, $serviceChargePdfContent, $storagePath) {
+            ], function ($message) use ($recipients, $unit, $soaAttachments, $serviceChargePdfContent, $storagePath) {
                 $message->to($recipients)
                     ->subject('Handover Notice - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
-                
+
                 // Request read and delivery receipts
                 $message->getHeaders()->addTextHeader('Disposition-Notification-To', config('mail.from.address'));
                 $message->getHeaders()->addTextHeader('Return-Receipt-To', config('mail.from.address'));
-                
+
                 // Attach all SOA files
                 foreach ($soaAttachments as $attachment) {
                     $filePath = storage_path('app/public/attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $attachment->filename);
@@ -1629,7 +1633,7 @@ class UnitController extends Controller
                 try {
                     // Quick validation before queuing
                     $unit = Unit::with(['users', 'attachments'])->findOrFail($unitId);
-                    
+
                     // Check if has SOA
                     $hasSOA = $unit->attachments->where('type', 'soa')->isNotEmpty();
                     if (!$hasSOA) {
@@ -1653,7 +1657,6 @@ class UnitController extends Controller
 
                     $validUnitIds[] = $unitId;
                     $queuedCount++;
-
                 } catch (\Exception $e) {
                     $skipped[] = [
                         'unit_id' => $unitId,
@@ -1692,7 +1695,6 @@ class UnitController extends Controller
                 'skipped' => $skipped,
                 'batch_id' => $batchId
             ], 200);
-
         } catch (\Exception $e) {
 
             return response()->json([
@@ -1732,7 +1734,7 @@ class UnitController extends Controller
                 try {
                     // Quick validation before queuing
                     $unit = Unit::with(['users', 'attachments'])->findOrFail($unitId);
-                    
+
                     // Check if has SOA
                     $hasSOA = $unit->attachments->where('type', 'soa')->isNotEmpty();
                     if (!$hasSOA) {
@@ -1756,7 +1758,6 @@ class UnitController extends Controller
 
                     $validUnitIds[] = $unitId;
                     $queuedCount++;
-
                 } catch (\Exception $e) {
                     $skipped[] = [
                         'unit_id' => $unitId,
@@ -1795,7 +1796,6 @@ class UnitController extends Controller
                 'skipped' => $skipped,
                 'batch_id' => $batchId
             ], 200);
-
         } catch (\Exception $e) {
 
             return response()->json([
@@ -1827,7 +1827,7 @@ class UnitController extends Controller
                 $failedUnits = Unit::whereIn('id', $batch->failed_unit_ids)
                     ->with(['users', 'property'])
                     ->get()
-                    ->map(function($unit) {
+                    ->map(function ($unit) {
                         return [
                             'id' => $unit->id,
                             'unit_number' => $unit->unit,
@@ -1851,7 +1851,6 @@ class UnitController extends Controller
                     'failed_units' => $failedUnits
                 ]
             ], 200);
-
         } catch (\Exception $e) {
 
             return response()->json([
@@ -1869,23 +1868,23 @@ class UnitController extends Controller
     {
         try {
             $specificUnitIds = $request->input('unit_ids');
-            
+
             // Build base query for units with owners
             $query = Unit::whereHas('users');
-            
+
             // If specific unit IDs provided, filter by them
             if ($specificUnitIds && is_array($specificUnitIds) && count($specificUnitIds) > 0) {
                 $query->whereIn('id', $specificUnitIds);
             }
-            
+
             $totalUnits = $query->count();
-            
+
             // Count units with SOA
             $withSOAQuery = clone $query;
             $unitsWithSOA = $withSOAQuery->whereHas('attachments', function ($q) {
                 $q->where('type', 'soa');
             })->count();
-            
+
             $unitsWithoutSOA = $totalUnits - $unitsWithSOA;
 
             return response()->json([
@@ -1896,7 +1895,6 @@ class UnitController extends Controller
                 'all_generated' => $unitsWithoutSOA === 0,
                 'filtered_by_upload' => !empty($specificUnitIds)
             ], 200);
-
         } catch (\Exception $e) {
 
             return response()->json([
@@ -1918,12 +1916,12 @@ class UnitController extends Controller
             'unit_ids_count' => is_array($request->input('unit_ids')) ? count($request->input('unit_ids')) : 0,
             'user' => $request->user()->full_name ?? 'Unknown'
         ]);
-        
+
         try {
             $regenerate = $request->input('regenerate', false);
             $withPho = $request->input('with_pho', false);
             $specificUnitIds = $request->input('unit_ids'); // Array of unit IDs from frontend
-            
+
             if ($regenerate) {
                 // Get units for regeneration
                 if ($specificUnitIds && is_array($specificUnitIds) && count($specificUnitIds) > 0) {
@@ -1933,12 +1931,12 @@ class UnitController extends Controller
                         ->whereHas('users')
                         ->whereNotNull('total_unit_price') // Only units with payment details
                         ->get();
-                    
+
                     \Log::info("Regenerating specific units with existing payment details", [
                         'requested_count' => count($specificUnitIds),
                         'units_found' => $units->count()
                     ]);
-                    
+
                     if ($units->isEmpty()) {
                         return response()->json([
                             'success' => false,
@@ -1985,7 +1983,7 @@ class UnitController extends Controller
                         })
                         ->whereHas('users') // Only units with owners
                         ->get();
-                    
+
                     \Log::info("Processing specific units from CSV", [
                         'requested_count' => count($specificUnitIds),
                         'units_without_soa' => $unitsWithoutSOA->count()
@@ -2053,13 +2051,12 @@ class UnitController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => $regenerate 
-                    ? "Queued {$batch->total_soas} SOA(s) for regeneration" 
+                'message' => $regenerate
+                    ? "Queued {$batch->total_soas} SOA(s) for regeneration"
                     : "Queued {$batch->total_soas} SOA(s) for generation",
                 'queued_count' => $batch->total_soas,
                 'batch_id' => $batchId
             ], 200);
-
         } catch (\Exception $e) {
 
             \Log::error("=== BULK SOA GENERATION FAILED ===", [
@@ -2101,15 +2098,15 @@ class UnitController extends Controller
                 $totalUnitPrice = floatval($unit->total_unit_price ?? 0);
                 $dldFees = floatval($unit->dld_fees ?? 0);
                 $adminFee = floatval($unit->admin_fee ?? 0);
-                
+
                 $calculatedAmount = $totalUnitPrice + $dldFees + $adminFee;
-                
+
                 // Only update if there's a difference
                 if ($calculatedAmount != floatval($unit->amount_to_pay ?? 0)) {
                     $unit->amount_to_pay = $calculatedAmount;
                     $unit->save();
                     $updatedCount++;
-                    
+
                     \Log::info("Updated unit amount", [
                         'unit_id' => $unit->id,
                         'unit_number' => $unit->unit,
@@ -2135,7 +2132,6 @@ class UnitController extends Controller
                 'skipped_count' => $skippedCount,
                 'total_count' => $units->count()
             ], 200);
-
         } catch (\Exception $e) {
             \Log::error("=== AMOUNT CALIBRATION FAILED ===", [
                 'error' => $e->getMessage(),
@@ -2179,7 +2175,6 @@ class UnitController extends Controller
                     'completed_at' => $batch->completed_at
                 ]
             ], 200);
-
         } catch (\Exception $e) {
 
             return response()->json([
@@ -2200,7 +2195,7 @@ class UnitController extends Controller
 
             // Get all owner emails
             $recipients = $unit->users->pluck('email')->toArray();
-            
+
             if (empty($recipients)) {
                 return response()->json([
                     'success' => false,
@@ -2225,7 +2220,7 @@ class UnitController extends Controller
                     'bookingUrl' => $bookingUrl,
                     'unit' => $unit,
                     'property' => $unit->property,
-                ], function($message) use ($user, $unit) {
+                ], function ($message) use ($user, $unit) {
                     $message->to($user->email)
                         ->subject('Booking Platform Access - Unit ' . $unit->unit . ', ' . $unit->property->project_name);
                 });
@@ -2278,7 +2273,7 @@ class UnitController extends Controller
 
             $file = $request->file('file');
             $filename = $request->type . '_' . time() . '_' . $file->getClientOriginalName();
-            
+
             // Create folder structure: project_name/unit_no/
             $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
             $path = $file->storeAs($folderPath, $filename, 'public');
@@ -2434,19 +2429,18 @@ class UnitController extends Controller
 
         // Get all uploaded attachment types
         $uploadedTypes = $unit->attachments->pluck('type')->unique()->toArray();
-        
+
         // Check if all client requirements are met
         $clientReady = empty(array_diff($clientRequirements, $uploadedTypes));
-        
+
         // Check if all developer requirements are met
         $developerReady = empty(array_diff($developerRequirements, $uploadedTypes));
-        
+
         // Handover is ready when both client and developer requirements are met
         $allRequirementsMet = $clientReady && $developerReady;
 
         $unit->handover_ready = $allRequirementsMet;
         $unit->save();
-        
     }
 
     /**
@@ -2456,13 +2450,13 @@ class UnitController extends Controller
     {
         try {
             $unit = Unit::with(['attachments'])->findOrFail($id);
-            
+
             // Check and update handover status
             $this->checkHandoverReady($unit);
-            
+
             // Get fresh unit data with updated status
             $unit = $unit->fresh(['attachments', 'remarks']);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Handover requirements validated',
@@ -2485,10 +2479,10 @@ class UnitController extends Controller
     {
         try {
             $unit = Unit::with(['property', 'users'])->findOrFail($id);
-            
+
             // Get all owners
             $owners = $unit->users;
-            
+
             if ($owners->isEmpty()) {
                 return response()->json(['message' => 'No owners found for this unit'], 400);
             }
@@ -2501,7 +2495,7 @@ class UnitController extends Controller
                     break;
                 }
             }
-            
+
             if (!$handoverDate) {
                 $handoverDate = now()->format('d/m/Y');
             }
@@ -2514,7 +2508,7 @@ class UnitController extends Controller
             ]);
 
             $filename = 'Service_Charge_Acknowledgement_' . $unit->property->project_name . '_' . $unit->unit . '.pdf';
-            
+
             return $pdf->download($filename);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Failed to generate document'], 500);
@@ -2532,11 +2526,11 @@ class UnitController extends Controller
             // Get logos using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
-            
+
             if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
                 $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                 $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
@@ -2553,11 +2547,11 @@ class UnitController extends Controller
             ]);
 
             $filename = 'Utilities_Registration_Guide_Unit_' . $unit->unit . '.pdf';
-            
+
             // Save to storage first
             $storagePath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $filename;
             \Storage::disk('public')->put($storagePath, $pdf->output());
-            
+
             // Return the file from storage
             return \Storage::disk('public')->download($storagePath, $filename);
         } catch (\Exception $e) {
@@ -2586,11 +2580,11 @@ class UnitController extends Controller
             // Get logos using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
-            
+
             if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
                 $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                 $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
@@ -2610,7 +2604,7 @@ class UnitController extends Controller
             ]);
 
             $filename = 'NOC_Handover_' . $unit->property->project_name . '_Unit_' . $unit->unit . '.pdf';
-            
+
             return $pdf->download($filename);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Failed to generate NOC'], 500);
@@ -2652,11 +2646,11 @@ class UnitController extends Controller
             // Get logos using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
-            
+
             if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
                 $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                 $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
@@ -2674,7 +2668,7 @@ class UnitController extends Controller
             $totalAmount = $unit->amount_to_pay ?? 0;
             $totalReceived = $unit->total_amount_paid ?? 0;
             $hasPHO = $unit->has_pho ?? false;
-            
+
             // New payment allocation logic: Pay DLD + Admin first, then Purchase Price
             if ($hasPHO) {
                 // For PHO units, show what's paid so far
@@ -2725,7 +2719,7 @@ class UnitController extends Controller
             ]);
 
             $filename = 'Finance_Clearance_' . $unit->property->project_name . '_Unit_' . $unit->unit . '.pdf';
-            
+
             // Delete previous finance clearance attachments
             $existingClearances = $unit->attachments()->where('type', 'finance_clearance')->get();
             foreach ($existingClearances as $clearance) {
@@ -2736,13 +2730,13 @@ class UnitController extends Controller
                 // Delete database record
                 $clearance->delete();
             }
-            
+
             // Save PDF as attachment
             $pdfContent = $pdf->output();
             $folderPath = 'attachments/' . $unit->property->project_name . '/' . $unit->unit;
             $filepath = $folderPath . '/' . $filename;
             \Storage::disk('public')->put($filepath, $pdfContent);
-            
+
             // Create attachment record
             $attachment = $unit->attachments()->create([
                 'filename' => $filename,
@@ -2750,7 +2744,7 @@ class UnitController extends Controller
                 'type' => 'finance_clearance',
             ]);
 
-            
+
             // Add timeline remark
             $adminName = $admin->full_name ?? 'Admin';
             $unit->remarks()->create([
@@ -2760,7 +2754,7 @@ class UnitController extends Controller
                 'admin_name' => $adminName,
                 'type' => 'clearance_generated'
             ]);
-            
+
             return $pdf->download($filename);
         } catch (\Exception $e) {
             \Log::error('Clearance generation failed: ' . $e->getMessage());
@@ -2783,7 +2777,7 @@ class UnitController extends Controller
             }
 
             $uploadedBuyerDocs = $unit->attachments->whereIn('type', $buyerRequirementTypes);
-            
+
             if ($uploadedBuyerDocs->count() < count($buyerRequirementTypes)) {
                 return response()->json([
                     'success' => false,
@@ -2810,7 +2804,7 @@ class UnitController extends Controller
                     'email' => $primaryOwner->email,
                     'mobile_number' => $primaryOwner->mobile_number,
                 ],
-                'documents' => $uploadedBuyerDocs->map(function($doc) {
+                'documents' => $uploadedBuyerDocs->map(function ($doc) {
                     return [
                         'id' => $doc->id,
                         'filename' => $doc->filename,
@@ -2854,7 +2848,7 @@ class UnitController extends Controller
             }
 
             $uploadedBuyerDocs = $unit->attachments->whereIn('type', $buyerRequirementTypes);
-            
+
             if ($uploadedBuyerDocs->count() < count($buyerRequirementTypes)) {
                 return response()->json(['message' => 'Buyer requirements are not complete. Missing required documents.'], 400);
             }
@@ -2868,11 +2862,11 @@ class UnitController extends Controller
             // Generate NOC PDF for developer to sign - get logos using Storage facade
             $vieraLogo = '';
             $vantageLogo = '';
-            
+
             if (\Storage::disk('public')->exists('letterheads/viera-black.png')) {
                 $vieraLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/viera-black.png'));
             }
-            
+
             if (\Storage::disk('public')->exists('letterheads/vantage-black.png')) {
                 $vantageLogo = 'data:image/png;base64,' . base64_encode(\Storage::disk('public')->get('letterheads/vantage-black.png'));
             }
@@ -2891,12 +2885,12 @@ class UnitController extends Controller
             ]);
             $nocFilename = 'NOC_Handover_' . $unit->unit . '_' . time() . '.pdf';
             $nocPath = storage_path('app/temp/' . $nocFilename);
-            
+
             // Create temp directory if it doesn't exist
             if (!file_exists(storage_path('app/temp'))) {
                 mkdir(storage_path('app/temp'), 0755, true);
             }
-            
+
             $nocPdf->save($nocPath);
 
             // Send email to developer with all documents
@@ -2909,6 +2903,9 @@ class UnitController extends Controller
                     ->cc([
                         'vantage@zedcapital.ae',
                         'docs@zedcapital.ae',
+                        'info@evanlimpenta.com',
+                        'Shahid@evanlimpenta.com',
+                        'maliahelp3@gmail.com',
                         'accounts@zedcapital.ae',
                         'maliahelp3@gmail.com',
                         'Shahid@evanlimpenta.com',
@@ -2919,27 +2916,27 @@ class UnitController extends Controller
                         'wbd@zedcapital.ae'
                     ])
                     ->subject('Handover Requirements - Unit ' . $unit->unit . ' - ' . $unit->property->project_name);
-                
+
                 // Attach all buyer documents
                 foreach ($uploadedBuyerDocs as $doc) {
                     try {
                         // Construct the file path - check multiple possible locations
                         $possiblePaths = [];
-                        
+
                         // If filepath is populated, use it
                         if (!empty($doc->filepath)) {
                             $possiblePaths[] = storage_path('app/public/' . $doc->filepath);
                         }
-                        
+
                         // Try: attachments/{property}/{unit}/{filename}
                         $possiblePaths[] = storage_path('app/public/attachments/' . $unit->property->project_name . '/' . $unit->unit . '/' . $doc->filename);
-                        
+
                         // Try: attachments/{filename}
                         $possiblePaths[] = storage_path('app/public/attachments/' . $doc->filename);
-                        
+
                         // Try: {filename} directly
                         $possiblePaths[] = storage_path('app/public/' . $doc->filename);
-                        
+
                         $filePath = null;
                         foreach ($possiblePaths as $path) {
                             if (file_exists($path)) {
@@ -2947,7 +2944,7 @@ class UnitController extends Controller
                                 break;
                             }
                         }
-                        
+
                         // Attach the file if found
                         if ($filePath && file_exists($filePath)) {
                             $message->attach($filePath, [
@@ -2955,7 +2952,6 @@ class UnitController extends Controller
                                 'mime' => 'application/pdf',
                             ]);
                         }
-                        
                     } catch (\Exception $e) {
                         // Log error but continue with other attachments
                         return response()->json([
@@ -2965,7 +2961,7 @@ class UnitController extends Controller
                         ], 500);
                     }
                 }
-                
+
                 // Attach the NOC PDF for developer to sign
                 try {
                     if (file_exists($nocPath)) {
@@ -2982,7 +2978,7 @@ class UnitController extends Controller
                     ], 500);
                 }
             });
-            
+
             // Clean up temp NOC file
             if (file_exists($nocPath)) {
                 unlink($nocPath);
@@ -3017,9 +3013,9 @@ class UnitController extends Controller
     {
         try {
             // Get all units with SOA attachments
-            $units = Unit::with(['property', 'attachments' => function($query) {
+            $units = Unit::with(['property', 'attachments' => function ($query) {
                 $query->where('type', 'soa');
-            }])->whereHas('attachments', function($query) {
+            }])->whereHas('attachments', function ($query) {
                 $query->where('type', 'soa');
             })->get();
 
@@ -3033,7 +3029,7 @@ class UnitController extends Controller
             // Create a temporary zip file
             $zipFileName = 'all-soas-' . now()->format('Y-m-d-His') . '.zip';
             $zipFilePath = storage_path('app/temp/' . $zipFileName);
-            
+
             // Create temp directory if it doesn't exist
             if (!file_exists(storage_path('app/temp'))) {
                 mkdir(storage_path('app/temp'), 0755, true);
@@ -3054,9 +3050,9 @@ class UnitController extends Controller
                     $propertyFolder = $unit->property->project_name;
                     $unitFolder = $unit->unit;
                     $filePath = "attachments/{$propertyFolder}/{$unitFolder}/{$soaAttachment->filename}";
-                    
+
                     $fullPath = storage_path('app/public/' . $filePath);
-                    
+
                     if (file_exists($fullPath)) {
                         // Add file to zip with project name prefix
                         $zipName = "{$propertyFolder}/{$soaAttachment->filename}";
@@ -3105,13 +3101,13 @@ class UnitController extends Controller
             $unitIds = $request->unit_ids;
 
             // Get selected units with SOA attachments
-            $units = Unit::with(['property', 'attachments' => function($query) {
+            $units = Unit::with(['property', 'attachments' => function ($query) {
                 $query->where('type', 'soa');
             }])
-            ->whereIn('id', $unitIds)
-            ->whereHas('attachments', function($query) {
-                $query->where('type', 'soa');
-            })->get();
+                ->whereIn('id', $unitIds)
+                ->whereHas('attachments', function ($query) {
+                    $query->where('type', 'soa');
+                })->get();
 
             if ($units->isEmpty()) {
                 return response()->json([
@@ -3123,7 +3119,7 @@ class UnitController extends Controller
             // Create a temporary zip file
             $zipFileName = 'selected-soas-' . now()->format('Y-m-d-His') . '.zip';
             $zipFilePath = storage_path('app/temp/' . $zipFileName);
-            
+
             // Create temp directory if it doesn't exist
             if (!file_exists(storage_path('app/temp'))) {
                 mkdir(storage_path('app/temp'), 0755, true);
@@ -3139,16 +3135,16 @@ class UnitController extends Controller
 
             $filesAdded = 0;
             $missingFiles = [];
-            
+
             foreach ($units as $unit) {
                 $soaAttachment = $unit->attachments->first();
                 if ($soaAttachment) {
                     $propertyFolder = $unit->property->project_name;
                     $unitFolder = $unit->unit;
                     $filePath = "attachments/{$propertyFolder}/{$unitFolder}/{$soaAttachment->filename}";
-                    
+
                     $fullPath = storage_path('app/public/' . $filePath);
-                    
+
                     if (file_exists($fullPath)) {
                         // Add file to zip with project name prefix
                         $zipName = "{$propertyFolder}/{$soaAttachment->filename}";
@@ -3184,7 +3180,7 @@ class UnitController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create zip file',
@@ -3278,7 +3274,7 @@ class UnitController extends Controller
             }
 
             $filePath = $batchData['file_path'];
-            
+
             if (!\Storage::disk('public')->exists($filePath)) {
                 return response()->json([
                     'success' => false,
@@ -3305,22 +3301,22 @@ class UnitController extends Controller
         if ($value === null || $value === '') {
             return null;
         }
-        
+
         $trimmed = trim($value);
-        
+
         // Check for placeholder values
         if ($trimmed === '-' || $trimmed === 'N/A') {
             return null;
         }
-        
+
         // Remove BOM, quotes, commas, spaces, and other formatting
         $cleanValue = str_replace(["\xEF\xBB\xBF", '"', ',', ' ', "'", "\r", "\n", "\t"], '', $trimmed);
-        
+
         // Now check if it's empty after cleaning
         if ($cleanValue === '') {
             return null;
         }
-        
+
         // Convert to float, ensuring we only get numeric values
         if (is_numeric($cleanValue)) {
             $floatValue = (float) $cleanValue;
@@ -3330,7 +3326,7 @@ class UnitController extends Controller
             }
             return $floatValue;
         }
-        
+
         return null;
     }
 
@@ -3347,7 +3343,7 @@ class UnitController extends Controller
                 'unit.property',
                 'unit.users'
             ])
-            ->orderBy('created_at', 'desc');
+                ->orderBy('created_at', 'desc');
 
             // Apply filters
             if ($request->has('date_from')) {
@@ -3360,12 +3356,12 @@ class UnitController extends Controller
                 $query->where('time', $request->input('time'));
             }
             if ($request->has('unit')) {
-                $query->whereHas('unit', function($q) use ($request) {
+                $query->whereHas('unit', function ($q) use ($request) {
                     $q->where('unit', 'like', '%' . $request->input('unit') . '%');
                 });
             }
             if ($request->has('project') && $request->input('project') !== 'all') {
-                $query->whereHas('unit.property', function($q) use ($request) {
+                $query->whereHas('unit.property', function ($q) use ($request) {
                     $q->where('project_name', $request->input('project'));
                 });
             }
@@ -3424,7 +3420,7 @@ class UnitController extends Controller
                 'unit.property',
                 'unit.users'
             ])
-            ->orderBy('created_at', 'desc');
+                ->orderBy('created_at', 'desc');
 
             // Apply same filters as getAllRemarks
             if ($request->has('date_from')) {
@@ -3437,12 +3433,12 @@ class UnitController extends Controller
                 $query->where('time', $request->input('time'));
             }
             if ($request->has('unit')) {
-                $query->whereHas('unit', function($q) use ($request) {
+                $query->whereHas('unit', function ($q) use ($request) {
                     $q->where('unit', 'like', '%' . $request->input('unit') . '%');
                 });
             }
             if ($request->has('project') && $request->input('project') !== 'all') {
-                $query->whereHas('unit.property', function($q) use ($request) {
+                $query->whereHas('unit.property', function ($q) use ($request) {
                     $q->where('project_name', $request->input('project'));
                 });
             }
@@ -3451,7 +3447,7 @@ class UnitController extends Controller
 
             // Create CSV content
             $csv = "Date,Time,Unit Number,Project,Remark,Type,Created By,Created At\n";
-            
+
             foreach ($remarks as $remark) {
                 $csv .= sprintf(
                     "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
@@ -3469,7 +3465,6 @@ class UnitController extends Controller
             return response($csv, 200)
                 ->header('Content-Type', 'text/csv')
                 ->header('Content-Disposition', 'attachment; filename="remarks-export-' . date('Y-m-d-His') . '.csv"');
-                
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -3483,7 +3478,7 @@ class UnitController extends Controller
     {
         try {
             $projectName = $request->input('project');
-            
+
             if (!$projectName) {
                 return response()->json([
                     'success' => false,
@@ -3498,11 +3493,11 @@ class UnitController extends Controller
                 'attachments',
                 'booking'
             ])
-            ->whereHas('property', function($q) use ($projectName) {
-                $q->where('project_name', $projectName);
-            })
-            ->where('unit', 'not like', '%test%')
-            ->get();
+                ->whereHas('property', function ($q) use ($projectName) {
+                    $q->where('project_name', $projectName);
+                })
+                ->where('unit', 'not like', '%test%')
+                ->get();
 
             if ($units->isEmpty()) {
                 return response()->json([
@@ -3530,7 +3525,7 @@ class UnitController extends Controller
                 $hasDeveloperNOC = $attachments->where('type', 'developer_noc_signed')->isNotEmpty() ? 'Yes' : 'No';
 
                 // Payment status
-                $paymentStatus = match($unit->payment_status) {
+                $paymentStatus = match ($unit->payment_status) {
                     'fully_paid' => 'Fully Paid',
                     'partial' => 'Partial',
                     default => 'Pending'
@@ -3539,7 +3534,7 @@ class UnitController extends Controller
                 // Booking info
                 $booking = $unit->booking;
                 $bookingStatus = $booking && $booking->booked_date ? 'Booked' : 'Not Booked';
-                
+
                 $bookingTime = 'N/A';
                 if ($booking && $booking->booked_date && $booking->booked_time) {
                     $bookedDate = \Carbon\Carbon::parse($booking->booked_date)->format('M d, Y');
@@ -3548,7 +3543,7 @@ class UnitController extends Controller
 
                 // Handover status from unit table
                 $handoverStatus = $unit->handover_status ?? 'Pending';
-                $handoverStatus = match($handoverStatus) {
+                $handoverStatus = match ($handoverStatus) {
                     'completed' => 'Completed',
                     'in_progress' => 'In Progress',
                     'scheduled' => 'Scheduled',
@@ -3578,7 +3573,6 @@ class UnitController extends Controller
             return response($csv, 200)
                 ->header('Content-Type', 'text/csv')
                 ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
-                
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
