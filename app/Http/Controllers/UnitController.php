@@ -668,8 +668,8 @@ class UnitController extends Controller
 
             // Create remark for payment status update
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => 'Payment status updated to: ' . $request->payment_status,
                 'type' => 'payment_update',
                 'admin_name' => $request->user()->full_name ?? 'System',
@@ -691,8 +691,8 @@ class UnitController extends Controller
 
                 // Create remark for payment proof upload
                 $unit->remarks()->create([
-                    'date' => now()->format('Y-m-d'),
-                    'time' => now()->format('H:i:s'),
+                    'date' => now('Asia/Dubai')->format('Y-m-d'),
+                    'time' => now('Asia/Dubai')->format('H:i:s'),
                     'event' => 'Payment proof uploaded',
                     'type' => 'document_upload',
                     'admin_name' => $request->user()->full_name ?? 'System',
@@ -737,8 +737,8 @@ class UnitController extends Controller
             $adminName = $request->user()->name ?? 'Admin';
 
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => $request->remark,
                 'type' => 'admin_note',
                 'admin_name' => $adminName,
@@ -802,8 +802,8 @@ class UnitController extends Controller
 
             // Add remark about SOA upload
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => 'SOA document uploaded',
                 'type' => 'system',
                 'admin_name' => $request->user()->full_name ?? 'System',
@@ -888,8 +888,8 @@ class UnitController extends Controller
 
                     // Add remark about SOA upload
                     $unit->remarks()->create([
-                        'date' => now()->format('Y-m-d'),
-                        'time' => now()->format('H:i:s'),
+                        'date' => now('Asia/Dubai')->format('Y-m-d'),
+                        'time' => now('Asia/Dubai')->format('H:i:s'),
                         'event' => 'SOA document uploaded via bulk upload',
                         'type' => 'system',
                         'admin_name' => $request->user()->full_name ?? 'System',
@@ -1582,8 +1582,8 @@ class UnitController extends Controller
 
             // Add remark about handover email sent
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => 'Handover notice email sent to ' . count($recipients) . ' owner(s): ' . implode(', ', $recipients),
                 'type' => 'email_sent',
                 'admin_name' => $request->user()->full_name ?? 'System',
@@ -2228,8 +2228,8 @@ class UnitController extends Controller
 
             // Add remark about booking link sent
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => 'Booking link sent to ' . count($recipients) . ' owner(s): ' . implode(', ', $recipients),
                 'type' => 'email_sent',
                 'admin_name' => $request->user()->full_name ?? 'System',
@@ -2311,8 +2311,8 @@ class UnitController extends Controller
 
             // Add remark about document upload
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => $typeLabel . ' document uploaded',
                 'type' => 'document_upload',
                 'admin_name' => $request->user()->full_name ?? 'System',
@@ -2373,8 +2373,8 @@ class UnitController extends Controller
 
             // Add remark about document deletion
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => $typeLabel . ' document deleted',
                 'type' => 'document_deletion',
                 'admin_name' => $request->user()->full_name ?? 'System',
@@ -2748,8 +2748,8 @@ class UnitController extends Controller
             // Add timeline remark
             $adminName = $admin->full_name ?? 'Admin';
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => "Finance clearance generated by {$adminName}",
                 'admin_name' => $adminName,
                 'type' => 'clearance_generated'
@@ -2986,8 +2986,8 @@ class UnitController extends Controller
 
             // Log the activity
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => 'Buyer requirements sent to developer for approval',
                 'type' => 'developer_email_sent',
                 'admin_name' => $request->user()->full_name ?? 'System'

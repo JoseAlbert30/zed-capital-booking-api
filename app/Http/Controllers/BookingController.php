@@ -269,8 +269,8 @@ class BookingController extends Controller
         $attendanceStatus = $isOwnerAttending ? 'by owner' : 'with POA (pending approval)';
         $bookedByInfo = $isAdminBooking ? "by admin ({$user->full_name}) on behalf of owner" : "by owner";
         $unit->remarks()->create([
-            'date' => now()->format('Y-m-d'),
-            'time' => now()->format('H:i:s'),
+            'date' => now('Asia/Dubai')->format('Y-m-d'),
+            'time' => now('Asia/Dubai')->format('H:i:s'),
             'event' => "Handover appointment booked for {$formattedDate} at {$formattedTime} {$attendanceStatus} {$bookedByInfo}",
             'type' => 'booking_created',
             'admin_name' => $isAdminBooking ? $user->full_name : 'System',
@@ -359,8 +359,8 @@ class BookingController extends Controller
 
             // Add remark for admin notification email sent
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => "Admin notification email sent for " . ($isPending ? 'POA approval' : 'booking confirmation'),
                 'type' => 'email_sent',
                 'admin_name' => 'System',
@@ -441,8 +441,8 @@ class BookingController extends Controller
                 // Add remark for confirmation email sent to unit
                 $confirmEmailTime = Carbon::createFromFormat('H:i', $request->booked_time)->format('g:i A');
                 $unit->remarks()->create([
-                    'date' => now()->format('Y-m-d'),
-                    'time' => now()->format('H:i:s'),
+                    'date' => now('Asia/Dubai')->format('Y-m-d'),
+                    'time' => now('Asia/Dubai')->format('H:i:s'),
                     'event' => "Booking confirmation email sent to " . count($allOwners) . " owner(s) for appointment on {$formattedDate} at {$confirmEmailTime}",
                     'type' => 'email_sent',
                     'admin_name' => 'System',
@@ -773,8 +773,8 @@ class BookingController extends Controller
             // Add remark for POA approval
             $formattedDate = Carbon::parse($booking->booked_date)->format('M d, Y');
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => "POA booking approved for appointment on {$formattedDate} at " . Carbon::createFromFormat('H:i', $booking->booked_time)->format('g:i A') . " - Approved by {$user->full_name}",
                 'type' => 'poa_approved',
                 'admin_name' => $user->full_name,
@@ -842,8 +842,8 @@ class BookingController extends Controller
 
                 // Add remark for confirmation email sent
                 $unit->remarks()->create([
-                    'date' => now()->format('Y-m-d'),
-                    'time' => now()->format('H:i:s'),
+                    'date' => now('Asia/Dubai')->format('Y-m-d'),
+                    'time' => now('Asia/Dubai')->format('H:i:s'),
                     'event' => "POA approval confirmation email sent to " . count($allOwners) . " owner(s) for appointment on {$formattedDate} at {$booking->booked_time}",
                     'type' => 'email_sent',
                     'admin_name' => 'System',
@@ -863,8 +863,8 @@ class BookingController extends Controller
             // Add remark for POA rejection
             $formattedDate = Carbon::parse($booking->booked_date)->format('M d, Y');
             $unit->remarks()->create([
-                'date' => now()->format('Y-m-d'),
-                'time' => now()->format('H:i:s'),
+                'date' => now('Asia/Dubai')->format('Y-m-d'),
+                'time' => now('Asia/Dubai')->format('H:i:s'),
                 'event' => "POA booking rejected for appointment on {$formattedDate} at {$booking->booked_time} - Rejected by {$user->full_name}. Reason: {$rejectionReason}",
                 'type' => 'poa_rejected',
                 'admin_name' => $user->full_name,
@@ -941,8 +941,8 @@ class BookingController extends Controller
 
                 // Add remark for rejection email sent
                 $unit->remarks()->create([
-                    'date' => now()->format('Y-m-d'),
-                    'time' => now()->format('H:i:s'),
+                    'date' => now('Asia/Dubai')->format('Y-m-d'),
+                    'time' => now('Asia/Dubai')->format('H:i:s'),
                     'event' => "POA rejection email sent to " . count($allOwners) . " owner(s) for appointment on {$formattedDate} at {$booking->booked_time}",
                     'type' => 'email_sent',
                     'admin_name' => 'System',
@@ -1041,8 +1041,8 @@ class BookingController extends Controller
             Remark::create([
                 'unit_id' => $unit->id,
                 'user_id' => $booking->user_id,
-                'date' => now()->toDateString(),
-                'time' => now()->toTimeString(),
+                'date' => now('Asia/Dubai')->toDateString(),
+                'time' => now('Asia/Dubai')->toTimeString(),
                 'event' => $fileTypeLabels[$fileType] . ' uploaded for booking #' . $booking->id,
                 'type' => 'handover',
                 'admin_user_id' => Auth::id(),
@@ -1105,8 +1105,8 @@ class BookingController extends Controller
             Remark::create([
                 'unit_id' => $unit->id,
                 'user_id' => $booking->user_id,
-                'date' => now()->toDateString(),
-                'time' => now()->toTimeString(),
+                'date' => now('Asia/Dubai')->toDateString(),
+                'time' => now('Asia/Dubai')->toTimeString(),
                 'event' => $fileTypeLabels[$fileType] . ' deleted for booking #' . $booking->id,
                 'type' => 'handover',
                 'admin_user_id' => Auth::id(),
@@ -1162,8 +1162,8 @@ class BookingController extends Controller
                 Remark::create([
                     'unit_id' => $unit->id,
                     'user_id' => $booking->user_id,
-                    'date' => now()->toDateString(),
-                    'time' => now()->toTimeString(),
+                    'date' => now('Asia/Dubai')->toDateString(),
+                    'time' => now('Asia/Dubai')->toTimeString(),
                     'event' => 'Handover completed by ' . $adminName . ' for booking #' . $booking->id,
                     'type' => 'handover',
                     'admin_user_id' => Auth::id(),
@@ -1181,8 +1181,8 @@ class BookingController extends Controller
             if ($user) {
                 Remark::create([
                     'user_id' => $user->id,
-                    'date' => now()->toDateString(),
-                    'time' => now()->toTimeString(),
+                    'date' => now('Asia/Dubai')->toDateString(),
+                    'time' => now('Asia/Dubai')->toTimeString(),
                     'event' => 'Handover completed for booking #' . $booking->id,
                     'type' => 'handover',
                     'admin_user_id' => Auth::id(),
@@ -1302,8 +1302,8 @@ class BookingController extends Controller
             $adminName = Auth::user()->name ?? Auth::user()->email;
             UnitRemark::create([
                 'unit_id' => $unit->id,
-                'date' => now()->toDateString(),
-                'time' => now()->toTimeString(),
+                'date' => now('Asia/Dubai')->toDateString(),
+                'time' => now('Asia/Dubai')->toTimeString(),
                 'event' => 'Snagging defect added' . ($request->input('location') ? ' at ' . $request->input('location') : '') . ': ' . ($request->input('description') ?: 'No description'),
                 'type' => 'snagging',
                 'admin_name' => $adminName,
@@ -1356,8 +1356,8 @@ class BookingController extends Controller
             $adminName = Auth::user()->name ?? Auth::user()->email;
             UnitRemark::create([
                 'unit_id' => $unit->id,
-                'date' => now()->toDateString(),
-                'time' => now()->toTimeString(),
+                'date' => now('Asia/Dubai')->toDateString(),
+                'time' => now('Asia/Dubai')->toTimeString(),
                 'event' => 'Snagging defect updated' . ($request->input('location') ? ' at ' . $request->input('location') : '') . ': ' . ($request->input('description') ?: 'No description'),
                 'type' => 'snagging',
                 'admin_name' => $adminName,
@@ -1405,8 +1405,8 @@ class BookingController extends Controller
             $adminName = Auth::user()->name ?? Auth::user()->email;
             UnitRemark::create([
                 'unit_id' => $unit->id,
-                'date' => now()->toDateString(),
-                'time' => now()->toTimeString(),
+                'date' => now('Asia/Dubai')->toDateString(),
+                'time' => now('Asia/Dubai')->toTimeString(),
                 'event' => 'Snagging defect deleted' . ($defectLocation ? ' at ' . $defectLocation : '') . ': ' . $defectInfo,
                 'type' => 'snagging',
                 'admin_name' => $adminName,
@@ -1591,7 +1591,7 @@ class BookingController extends Controller
             return response()->json([
                 'success' => true,
                 'pdf_content' => base64_encode($pdf->output()),
-                'filename' => 'Declaration_' . $booking->id . '_' . now()->format('Ymd_His') . '.pdf'
+                'filename' => 'Declaration_' . $booking->id . '_' . now('Asia/Dubai')->format('Ymd_His') . '.pdf'
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1700,8 +1700,8 @@ class BookingController extends Controller
             Remark::create([
                 'unit_id' => $unit->id,
                 'user_id' => $booking->user_id,
-                'date' => now()->toDateString(),
-                'time' => now()->toTimeString(),
+                'date' => now('Asia/Dubai')->toDateString(),
+                'time' => now('Asia/Dubai')->toTimeString(),
                 'event' => 'Handover Checklist generated and saved for booking #' . $booking->id,
                 'type' => 'handover',
                 'admin_user_id' => Auth::id(),
