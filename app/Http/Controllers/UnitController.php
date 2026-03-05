@@ -407,21 +407,41 @@ class UnitController extends Controller
                     // Skip header row
                     $header = fgetcsv($handle);
                     
+                    // Detect CSV format based on header
+                    $isNewFormat = false;
+                    if ($header && count($header) >= 2) {
+                        $firstCol = strtolower(trim($header[0]));
+                        $secondCol = strtolower(trim($header[1]));
+                        // New format: "Building #", "Unit Name"
+                        if (strpos($firstCol, 'building') !== false && strpos($secondCol, 'unit') !== false) {
+                            $isNewFormat = true;
+                        }
+                    }
+                    
                     while (($row = fgetcsv($handle)) !== false) {
                         $results['total']++;
                         
-                        // Expected format: unit, floor, building, square_footage, dewa_premise_number
                         if (count($row) < 1) {
                             $results['errors'][] = "Row {$results['total']}: Invalid format";
                             $results['skipped']++;
                             continue;
                         }
 
-                        $unitNumber = trim($row[0]);
-                        $floor = isset($row[1]) ? trim($row[1]) : null;
-                        $building = isset($row[2]) ? trim($row[2]) : null;
-                        $squareFootage = isset($row[3]) ? trim($row[3]) : null;
-                        $dewaPremiseNumber = isset($row[4]) ? trim($row[4]) : null;
+                        if ($isNewFormat) {
+                            // New format: Building #, Unit Name
+                            $building = isset($row[0]) ? trim($row[0]) : null;
+                            $unitNumber = isset($row[1]) ? trim($row[1]) : null;
+                            $floor = null;
+                            $squareFootage = null;
+                            $dewaPremiseNumber = null;
+                        } else {
+                            // Old format: unit, floor, building, square_footage, dewa_premise_number
+                            $unitNumber = trim($row[0]);
+                            $floor = isset($row[1]) ? trim($row[1]) : null;
+                            $building = isset($row[2]) ? trim($row[2]) : null;
+                            $squareFootage = isset($row[3]) ? trim($row[3]) : null;
+                            $dewaPremiseNumber = isset($row[4]) ? trim($row[4]) : null;
+                        }
 
                         if (empty($unitNumber)) {
                             $results['errors'][] = "Row {$results['total']}: Unit number is required";

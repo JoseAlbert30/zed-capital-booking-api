@@ -6,6 +6,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\UnitController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\SalesOfferController;
+use App\Http\Controllers\PropertyController;
 use App\Http\Controllers\FinancePOPController;
 use App\Http\Controllers\FinancePenaltyController;
 use App\Http\Controllers\FinanceNOCController;
@@ -158,8 +159,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/bulk-status/{batchId}', [SalesOfferController::class, 'checkBulkStatus']);
     });
 
-    Route::get('/properties', function () {
-        return response()->json(\App\Models\Property::all());
+    Route::prefix('properties')->group(function () {
+        Route::get('/', [PropertyController::class, 'index']);
+        Route::post('/', [PropertyController::class, 'store']);
+        Route::get('/{id}', [PropertyController::class, 'show']);
+        Route::match(['post', 'put'], '/{id}', [PropertyController::class, 'update']);
+        Route::delete('/{id}', [PropertyController::class, 'destroy']);
     });
 });
 
