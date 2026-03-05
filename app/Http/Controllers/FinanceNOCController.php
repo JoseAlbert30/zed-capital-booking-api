@@ -451,10 +451,10 @@ class FinanceNOCController extends Controller
     {
         try {
             $adminEmails = [
-                'operations@zedcapital.ae',
-                'docs@zedcapital.ae',
-                'admin@zedcapital.ae',
-                'clientsupport@zedcapital.ae',
+                // 'operations@zedcapital.ae',
+                // 'docs@zedcapital.ae',
+                // 'admin@zedcapital.ae',
+                // 'clientsupport@zedcapital.ae',
                 'wbd@zedcapital.ae',
             ];
 
