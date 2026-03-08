@@ -57,7 +57,7 @@ class POPDeveloperNotification extends Mailable
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.pop-developer-notification',
+            view: 'emails.pop-developer-notification',
         );
     }
 

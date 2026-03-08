@@ -22,6 +22,9 @@ Route::prefix('auth')->group(function () {
     Route::post('/magic-link', [AuthController::class, 'validateMagicLink']);
 });
 
+// Public route for properties list (needed for sidebar)
+Route::get('/properties', [PropertyController::class, 'index']);
+
 // Public route for viewing attachments (no auth required for file viewing)
 Route::get('/users/{user}/attachments/{attachment}', [UserController::class, 'viewAttachment']);
 
@@ -160,7 +163,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('properties')->group(function () {
-        Route::get('/', [PropertyController::class, 'index']);
+        // GET /properties is public (defined above for sidebar)
         Route::post('/', [PropertyController::class, 'store']);
         Route::get('/{id}', [PropertyController::class, 'show']);
         Route::match(['post', 'put'], '/{id}', [PropertyController::class, 'update']);
@@ -263,9 +266,13 @@ Route::prefix('developer')->group(function () {
     Route::get('/verify', [DeveloperPortalController::class, 'verify']);
     Route::post('/set-password', [DeveloperPortalController::class, 'setPassword']);
     Route::post('/login', [DeveloperPortalController::class, 'login']);
+    Route::post('/select-project', [DeveloperPortalController::class, 'selectProject']);
     Route::get('/pops', [DeveloperPortalController::class, 'getPOPs']);
     Route::post('/pops/{popId}/receipt', [DeveloperPortalController::class, 'uploadReceipt']);
     Route::get('/pops/{popId}/download', [DeveloperPortalController::class, 'downloadPOP']);
+    Route::get('/my-projects', [DeveloperPortalController::class, 'getMyProjects']);
+    Route::get('/pending-counts', [DeveloperPortalController::class, 'getPendingCounts']);
+    Route::get('/projects/{projectName}/access-list', [DeveloperPortalController::class, 'getProjectAccessList']);
 });
 
 Route::get('/health', function () {

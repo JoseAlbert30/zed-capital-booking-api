@@ -122,7 +122,7 @@
     
     <div class="footer">
         <p>This is an automated notification from the Zed Capital Finance Portal.</p>
-        <p>© {{ date('Y') }} Vantage Ventures Real Estate Development L.L.C. All rights reserved.</p>
+        <p>© {{ date('Y') }} Zed Capital Real Estate All rights reserved.</p>
     </div>
 </body>
 </html>

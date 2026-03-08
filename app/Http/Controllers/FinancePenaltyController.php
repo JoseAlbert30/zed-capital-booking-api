@@ -140,16 +140,24 @@ class FinancePenaltyController extends Controller
                 ], 403);
             }
 
-            // Generate penalty number
-            $lastPenalty = FinancePenalty::orderBy('id', 'desc')->first();
+            // Get project prefix from property
+            $property = Property::where('project_name', $request->project_name)->first();
+            $prefix = $property && $property->code_prefix ? $property->code_prefix : 'PROJ';
+
+            // Generate penalty number with project prefix
+            $lastPenalty = FinancePenalty::where('project_name', $request->project_name)
+                ->where('penalty_number', 'like', $prefix . '-PEN-%')
+                ->orderBy('id', 'desc')
+                ->first();
+            
             if ($lastPenalty) {
-                preg_match('/PEN-(\d+)/', $lastPenalty->penalty_number, $matches);
+                preg_match('/' . preg_quote($prefix, '/') . '-PEN-(\d+)/', $lastPenalty->penalty_number, $matches);
                 $lastNumber = isset($matches[1]) ? intval($matches[1]) : 0;
                 $nextNumber = $lastNumber + 1;
             } else {
                 $nextNumber = 1;
             }
-            $penaltyNumber = 'PEN-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+            $penaltyNumber = $prefix . '-PEN-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
             // Create the penalty record
             $penalty = FinancePenalty::create([
@@ -200,6 +208,15 @@ class FinancePenaltyController extends Controller
 
             // Broadcast event
             broadcast(new FinancePenaltyUpdated($penalty->project_name, 'created', $penaltyData));
+
+            // Broadcast pending counts update to developer for this project
+            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
+                ->where('is_active', true)
+                ->value('developer_email');
+            
+            if ($developerEmail) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
+            }
 
             return response()->json([
                 'success' => true,
@@ -776,6 +793,15 @@ class FinancePenaltyController extends Controller
 
             // Broadcast event
             broadcast(new FinancePenaltyUpdated($penalty->project_name, 'receipt-uploaded', $penaltyData));
+
+            // Broadcast pending counts update to developer
+            $authType = $request->attributes->get('auth_type');
+            if ($authType === 'developer') {
+                $magicLink = $request->attributes->get('developer_magic_link');
+                if ($magicLink && $magicLink->developer_email) {
+                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
+                }
+            }
 
             // Notify admin about receipt upload
             $this->sendReceiptUploadedNotificationToAdmin($penalty);

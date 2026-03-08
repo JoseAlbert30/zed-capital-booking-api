@@ -107,16 +107,24 @@ class FinanceNOCController extends Controller
                 ], 404);
             }
 
-            // Generate NOC number
-            $lastNOC = FinanceNOC::orderBy('id', 'desc')->first();
+            // Get project prefix from property
+            $property = Property::where('project_name', $request->project_name)->first();
+            $prefix = $property && $property->code_prefix ? $property->code_prefix : 'PROJ';
+
+            // Generate NOC number with project prefix
+            $lastNOC = FinanceNOC::where('project_name', $request->project_name)
+                ->where('noc_number', 'like', $prefix . '-NOC-%')
+                ->orderBy('id', 'desc')
+                ->first();
+            
             if ($lastNOC) {
-                preg_match('/NOC-(\d+)/', $lastNOC->noc_number, $matches);
+                preg_match('/' . preg_quote($prefix, '/') . '-NOC-(\d+)/', $lastNOC->noc_number, $matches);
                 $lastNumber = isset($matches[1]) ? intval($matches[1]) : 0;
                 $nextNumber = $lastNumber + 1;
             } else {
                 $nextNumber = 1;
             }
-            $nocNumber = 'NOC-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+            $nocNumber = $prefix . '-NOC-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
             // Create the NOC record
             $noc = FinanceNOC::create([
@@ -160,6 +168,15 @@ class FinanceNOCController extends Controller
                 'channel' => 'finance.' . str_replace(' ', '-', strtolower($request->project_name))
             ]);
             broadcast(new FinanceNOCUpdated($request->project_name, 'created', $nocData));
+
+            // Broadcast pending counts update to developer for this project
+            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
+                ->where('is_active', true)
+                ->value('developer_email');
+            
+            if ($developerEmail) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
+            }
 
             return response()->json([
                 'success' => true,
@@ -233,6 +250,14 @@ class FinanceNOCController extends Controller
 
             // Send notification to admin team
             $this->sendNOCDocumentUploadedNotificationToAdmin($noc, $developerName);
+
+            // Broadcast pending counts update to developer
+            if ($authType === 'developer') {
+                $magicLink = $request->attributes->get('developer_magic_link');
+                if ($magicLink && $magicLink->developer_email) {
+                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
+                }
+            }
 
             $noc->load('creator:id,full_name,email', 'unit');
 

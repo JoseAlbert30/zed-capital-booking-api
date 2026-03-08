@@ -105,16 +105,24 @@ class FinanceSOAController extends Controller
                 ], 404);
             }
 
-            // Generate SOA number
-            $lastSOA = FinanceSOA::orderBy('id', 'desc')->first();
+            // Get project prefix from property
+            $property = Property::where('project_name', $request->project_name)->first();
+            $prefix = $property && $property->code_prefix ? $property->code_prefix : 'PROJ';
+
+            // Generate SOA number with project prefix
+            $lastSOA = FinanceSOA::where('project_name', $request->project_name)
+                ->where('soa_number', 'like', $prefix . '-SOA-%')
+                ->orderBy('id', 'desc')
+                ->first();
+            
             if ($lastSOA) {
-                preg_match('/SOA-(\d+)/', $lastSOA->soa_number, $matches);
+                preg_match('/' . preg_quote($prefix, '/') . '-SOA-(\d+)/', $lastSOA->soa_number, $matches);
                 $lastNumber = isset($matches[1]) ? intval($matches[1]) : 0;
                 $nextNumber = $lastNumber + 1;
             } else {
                 $nextNumber = 1;
             }
-            $soaNumber = 'SOA-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+            $soaNumber = $prefix . '-SOA-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
             // Create the SOA record
             $soa = FinanceSOA::create([
@@ -156,6 +164,15 @@ class FinanceSOAController extends Controller
                 'channel' => 'finance.' . str_replace(' ', '-', strtolower($request->project_name))
             ]);
             broadcast(new FinanceSOAUpdated($request->project_name, 'created', $soaData));
+
+            // Broadcast pending counts update to developer for this project
+            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
+                ->where('is_active', true)
+                ->value('developer_email');
+            
+            if ($developerEmail) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
+            }
 
             return response()->json([
                 'success' => true,
@@ -229,6 +246,14 @@ class FinanceSOAController extends Controller
 
             // Send notification to admin team
             $this->sendSOADocumentUploadedNotificationToAdmin($soa, $developerName);
+
+            // Broadcast pending counts update to developer
+            if ($authType === 'developer') {
+                $magicLink = $request->attributes->get('developer_magic_link');
+                if ($magicLink && $magicLink->developer_email) {
+                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
+                }
+            }
 
             $soa->load('creator:id,full_name,email', 'unit');
 

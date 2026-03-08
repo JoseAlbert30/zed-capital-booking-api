@@ -110,16 +110,25 @@ class FinancePOPController extends Controller
             // Generate POP number if not provided
             $popNumber = $request->pop_number;
             if (!$popNumber) {
-                // Get the last POP number
-                $lastPop = FinancePOP::orderBy('id', 'desc')->first();
+                // Get project prefix from property
+                $property = Property::where('project_name', $request->project_name)->first();
+                $prefix = $property && $property->code_prefix ? $property->code_prefix : 'PROJ';
+
+                // Use the highest existing number for this project/prefix
+                $lastPop = FinancePOP::where('project_name', $request->project_name)
+                    ->where('pop_number', 'like', $prefix . '-POP-%')
+                    ->orderBy('id', 'desc')
+                    ->first();
+
                 if ($lastPop) {
-                    preg_match('/POP-(\d+)/', $lastPop->pop_number, $matches);
+                    preg_match('/' . preg_quote($prefix, '/') . '-POP-(\d+)/', $lastPop->pop_number, $matches);
                     $lastNumber = isset($matches[1]) ? intval($matches[1]) : 0;
                     $nextNumber = $lastNumber + 1;
                 } else {
                     $nextNumber = 1;
                 }
-                $popNumber = 'POP-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+
+                $popNumber = $prefix . '-POP-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
             }
 
             // Store the attachment with new structure: finance/{project_name}/{unit_no}/
@@ -151,6 +160,15 @@ class FinancePOPController extends Controller
             $popData = $this->formatPOPResponse($pop);
 
             broadcast(new \App\Events\FinancePOPUpdated($pop->project_name, 'created', $popData));
+
+            // Broadcast pending counts update to developer for this project
+            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
+                ->where('is_active', true)
+                ->value('developer_email');
+            
+            if ($developerEmail) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
+            }
 
             return response()->json([
                 'success' => true,
@@ -343,6 +361,7 @@ class FinancePOPController extends Controller
                 'developer_name' => $property->developer_name,
                 'cc_emails' => $property->cc_emails,
                 'penalty_initiated_by' => $property->penalty_initiated_by ?? 'admin',
+                'code_prefix' => $property->code_prefix,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -362,6 +381,7 @@ class FinancePOPController extends Controller
             'developer_name' => 'nullable|string',
             'cc_emails' => 'nullable|string',
             'penalty_initiated_by' => 'nullable|in:admin,developer',
+            'code_prefix' => 'nullable|string|min:4|max:10|regex:/^[A-Z0-9]+$/',
         ]);
 
         if ($validator->fails()) {
@@ -388,6 +408,10 @@ class FinancePOPController extends Controller
             
             if ($request->has('penalty_initiated_by')) {
                 $property->penalty_initiated_by = $request->input('penalty_initiated_by');
+            }
+            
+            if ($request->has('code_prefix')) {
+                $property->code_prefix = $request->input('code_prefix');
             }
             
             $property->save();
@@ -457,6 +481,14 @@ class FinancePOPController extends Controller
             $popData = $this->formatPOPResponse($pop);
 
             broadcast(new \App\Events\FinancePOPUpdated($pop->project_name, 'receipt-uploaded', $popData));
+
+            // Broadcast pending counts update to developer
+            if ($authType === 'developer') {
+                $magicLink = $request->attributes->get('developer_magic_link');
+                if ($magicLink && $magicLink->developer_email) {
+                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
+                }
+            }
 
             return response()->json([
                 'success' => true,

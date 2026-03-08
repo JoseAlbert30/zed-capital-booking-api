@@ -113,16 +113,24 @@ class FinanceThirdpartyController extends Controller
                 ], 404);
             }
 
-            // Generate thirdparty number
-            $lastTP = FinanceThirdparty::orderBy('id', 'desc')->first();
+            // Get project prefix from property
+            $property = Property::where('project_name', $request->project_name)->first();
+            $prefix = $property && $property->code_prefix ? $property->code_prefix : 'PROJ';
+
+            // Generate thirdparty number with project prefix
+            $lastTP = FinanceThirdparty::where('project_name', $request->project_name)
+                ->where('thirdparty_number', 'like', $prefix . '-TP-%')
+                ->orderBy('id', 'desc')
+                ->first();
+            
             if ($lastTP) {
-                preg_match('/TP-(\d+)/', $lastTP->thirdparty_number, $matches);
+                preg_match('/' . preg_quote($prefix, '/') . '-TP-(\d+)/', $lastTP->thirdparty_number, $matches);
                 $lastNumber = isset($matches[1]) ? intval($matches[1]) : 0;
                 $nextNumber = $lastNumber + 1;
             } else {
                 $nextNumber = 1;
             }
-            $thirdpartyNumber = 'TP-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+            $thirdpartyNumber = $prefix . '-TP-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
             // Upload form document
             $formDoc = $request->file('form_document');
@@ -161,6 +169,15 @@ class FinanceThirdpartyController extends Controller
             ];
 
             broadcast(new \App\Events\FinanceThirdpartyUpdated($thirdparty->project_name, 'created', $thirdpartyData));
+
+            // Broadcast pending counts update to developer for this project
+            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
+                ->where('is_active', true)
+                ->value('developer_email');
+            
+            if ($developerEmail) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
+            }
 
             return response()->json([
                 'success' => true,
@@ -550,6 +567,14 @@ class FinanceThirdpartyController extends Controller
             $thirdparty->receipt_uploaded_at = now();
             $thirdparty->receipt_uploaded_by = $developerName;
             $thirdparty->save();
+
+            // Broadcast pending counts update to developer
+            if ($authType === 'developer') {
+                $magicLink = $request->attributes->get('developer_magic_link');
+                if ($magicLink && $magicLink->developer_email) {
+                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
+                }
+            }
 
             return response()->json([
                 'success' => true,

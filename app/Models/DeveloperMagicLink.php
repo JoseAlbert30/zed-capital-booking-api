@@ -95,13 +95,27 @@ class DeveloperMagicLink extends Model
 
     /**
      * Set password for developer
+     * Updates ALL magic links for this email to ensure single password works across all projects
      */
     public function setPassword(string $password): void
     {
-        $this->password = bcrypt($password);
+        $hashedPassword = bcrypt($password);
+        $passwordSetAt = now();
+        
+        // Update this link
+        $this->password = $hashedPassword;
         $this->password_set = true;
-        $this->password_set_at = now();
+        $this->password_set_at = $passwordSetAt;
         $this->save();
+        
+        // Update all other magic links for this email
+        self::where('developer_email', $this->developer_email)
+            ->where('id', '!=', $this->id)
+            ->update([
+                'password' => $hashedPassword,
+                'password_set' => true,
+                'password_set_at' => $passwordSetAt,
+            ]);
     }
 
     /**

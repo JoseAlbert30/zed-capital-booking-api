@@ -1,6 +1,16 @@
 @extends('emails.layouts.master')
 
 @section('content')
+@php
+    $popNumber = $popNumber ?? $soaNumber ?? ($pop->pop_number ?? null) ?? ($soa->soa_number ?? null) ?? 'N/A';
+    $unitNumber = $unitNumber ?? ($pop->unit_number ?? null) ?? ($soa->unit_number ?? null) ?? 'N/A';
+    $projectName = $projectName ?? ($pop->project_name ?? null) ?? ($soa->project_name ?? null) ?? 'N/A';
+    $amount = $amount ?? ($pop->amount ?? null);
+    $receiptNumber = $receiptNumber ?? ($pop->receipt_name ?? null);
+    $popUrl = $popUrl ?? ($pop->attachment_url ?? null);
+    $receiptUrl = $receiptUrl ?? ($pop->receipt_url ?? null);
+@endphp
+
 <div class="greeting">
     Dear {{ $developerName }},
 </div>
@@ -25,7 +35,13 @@
     </div>
     <div class="info-row">
         <span class="info-label">Amount:</span>
-        <span class="info-value">AED {{ number_format($amount, 2) }}</span>
+        <span class="info-value">
+            @if(isset($amount) && is_numeric($amount))
+                AED {{ number_format($amount, 2) }}
+            @else
+                N/A
+            @endif
+        </span>
     </div>
     <div class="info-row">
         <span class="info-label">Receipt:</span>

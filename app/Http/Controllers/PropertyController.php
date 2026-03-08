@@ -23,6 +23,7 @@ class PropertyController extends Controller
             return [
                 'id' => $property->id,
                 'project_name' => $property->project_name,
+                'code_prefix' => $property->code_prefix,
                 'location' => $property->location,
                 'thumbnail' => $property->thumbnail ? asset('storage/' . $property->thumbnail) : null,
                 'unit_count' => $property->units->count(),
@@ -31,6 +32,7 @@ class PropertyController extends Controller
         });
 
         return response()->json([
+            'success' => true,
             'properties' => $properties
         ]);
     }

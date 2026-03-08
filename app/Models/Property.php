@@ -12,6 +12,7 @@ class Property extends Model
 
     protected $fillable = [
         'project_name',
+        'code_prefix',
         'location',
         'thumbnail',
         'developer_email',
