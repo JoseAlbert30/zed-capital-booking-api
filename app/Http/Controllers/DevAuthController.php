@@ -44,11 +44,16 @@ class DevAuthController extends Controller
             $request->header('User-Agent')
         );
 
+        // Check if developer already exists
+        $devUser = DevUser::where('email', $magicLink->developer_email)->first();
+
         return response()->json([
             'success' => true,
             'project_name' => $magicLink->project_name,
             'email' => $magicLink->developer_email,
             'token' => $magicLink->token,
+            'has_account' => $devUser !== null,
+            'user_name' => $devUser ? $devUser->name : null,
         ]);
     }
 
@@ -107,7 +112,10 @@ class DevAuthController extends Controller
         $devUser = DevUser::where('email', $request->email)->first();
 
         if ($devUser) {
-            // Existing developer - just grant access to this project
+            // Existing developer - check if they already have access
+            $alreadyHasAccess = FinanceAccess::hasAccess($devUser->id, $magicLink->project_name);
+
+            // Grant access to this project (updateOrCreate prevents duplicates)
             FinanceAccess::grantAccess($devUser->id, $magicLink->project_name);
 
             // Generate token
@@ -115,13 +123,16 @@ class DevAuthController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Access granted to project',
+                'message' => $alreadyHasAccess 
+                    ? 'You already have access to this project' 
+                    : 'Access granted to project',
                 'token' => $token,
                 'user' => [
                     'id' => $devUser->id,
                     'name' => $devUser->name,
                     'email' => $devUser->email,
                 ],
+                'already_had_access' => $alreadyHasAccess,
             ]);
         }
 
@@ -192,6 +203,83 @@ class DevAuthController extends Controller
                 'email' => $devUser->email,
             ],
             'projects' => $projects,
+        ]);
+    }
+
+    /**
+     * Login with magic link token for existing developer
+     * This grants access to the project in the magic link
+     */
+    public function loginWithMagicLink(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'token' => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        // Validate magic link
+        $magicLink = DeveloperMagicLink::where('token', $request->token)->first();
+
+        if (!$magicLink || !$magicLink->isValid()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or expired magic link',
+            ], 404);
+        }
+
+        // Verify email matches magic link
+        if ($magicLink->developer_email !== $request->email) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email does not match magic link',
+            ], 403);
+        }
+
+        // Authenticate developer
+        $devUser = DevUser::where('email', $request->email)->first();
+
+        if (!$devUser || !Hash::check($request->password, $devUser->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials',
+            ], 401);
+        }
+
+        // Check if user already has access to this project
+        $alreadyHasAccess = FinanceAccess::hasAccess($devUser->id, $magicLink->project_name);
+
+        // Grant access to the project (updateOrCreate prevents duplicates)
+        FinanceAccess::grantAccess($devUser->id, $magicLink->project_name);
+
+        // Generate token
+        $token = $devUser->createToken('developer-access')->plainTextToken;
+
+        // Get accessible projects
+        $projects = FinanceAccess::getUserProjects($devUser->id);
+
+        return response()->json([
+            'success' => true,
+            'message' => $alreadyHasAccess 
+                ? 'Logged in successfully. You already have access to this project.' 
+                : 'Logged in and granted access to project',
+            'token' => $token,
+            'user' => [
+                'id' => $devUser->id,
+                'name' => $devUser->name,
+                'email' => $devUser->email,
+            ],
+            'projects' => $projects,
+            'granted_project' => $magicLink->project_name,
+            'already_had_access' => $alreadyHasAccess,
         ]);
     }
 

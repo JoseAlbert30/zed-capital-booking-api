@@ -28,6 +28,7 @@ Route::prefix('dev')->group(function () {
     Route::post('/validate-magic-link', [DevAuthController::class, 'validateMagicLink']);
     Route::post('/register', [DevAuthController::class, 'registerOrGrantAccess']);
     Route::post('/login', [DevAuthController::class, 'login']);
+    Route::post('/login-with-magic-link', [DevAuthController::class, 'loginWithMagicLink']);
     
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [DevAuthController::class, 'logout']);
