@@ -4,7 +4,9 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use App\Models\DeveloperMagicLink;
+use App\Models\User;
+use App\Models\DevUser;
+use App\Models\FinanceAccess;
 use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -15,7 +17,7 @@ class AuthenticateDeveloperOrAdmin
      *
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next, ?string $projectParam = null): Response
     {
         $authHeader = $request->header('Authorization');
         
@@ -28,34 +30,54 @@ class AuthenticateDeveloperOrAdmin
         
         $token = substr($authHeader, 7);
         
-        // First, try to authenticate as admin using Sanctum
+        // Authenticate using Sanctum
         $accessToken = PersonalAccessToken::findToken($token);
         
-        if ($accessToken) {
-            // Valid Sanctum token - user is an admin
-            $user = $accessToken->tokenable;
-            $request->setUserResolver(fn () => $user);
-            $request->attributes->set('auth_type', 'admin');
-            return $next($request);
+        if (!$accessToken) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or expired token.',
+            ], 401);
         }
         
-        // If not a Sanctum token, check for developer magic link token
-        $magicLink = DeveloperMagicLink::where('token', $token)->first();
+        $user = $accessToken->tokenable;
+        $request->setUserResolver(fn () => $user);
         
-        if ($magicLink && $magicLink->isValid()) {
-            // Valid developer token found
-            $request->attributes->set('auth_type', 'developer');
-            $request->attributes->set('developer_magic_link', $magicLink);
-            $request->attributes->set('developer_project', $magicLink->project_name);
-            $request->attributes->set('developer_name', $magicLink->developer_name);
-            $request->attributes->set('developer_email', $magicLink->developer_email);
-            return $next($request);
+        // Check if this is an admin (User) or developer (DevUser)
+        $isAdmin = $user instanceof User;
+        $isDeveloper = $user instanceof DevUser;
+        
+        if (!$isAdmin && !$isDeveloper) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Invalid user type.',
+            ], 403);
         }
-
-        // Neither admin nor developer authentication succeeded
-        return response()->json([
-            'success' => false,
-            'message' => 'Unauthorized. Invalid or expired token.',
-        ], 401);
+        
+        // Set auth type
+        $request->attributes->set('auth_type', $isAdmin ? 'admin' : 'developer');
+        
+        // If project parameter is specified, check project access for developers
+        if ($projectParam && $isDeveloper) {
+            $projectName = $request->route($projectParam);
+            
+            if (!$projectName) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project name is required.',
+                ], 400);
+            }
+            
+            if (!FinanceAccess::hasAccess($user->id, $projectName)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. You do not have access to this project.',
+                ], 403);
+            }
+            
+            $request->attributes->set('developer_project', $projectName);
+        }
+        
+        return $next($request);
     }
 }

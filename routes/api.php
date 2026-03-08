@@ -13,6 +13,7 @@ use App\Http\Controllers\FinanceNOCController;
 use App\Http\Controllers\FinanceSOAController;
 use App\Http\Controllers\FinanceThirdpartyController;
 use App\Http\Controllers\DeveloperPortalController;
+use App\Http\Controllers\DevAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -20,6 +21,20 @@ Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/magic-link', [AuthController::class, 'validateMagicLink']);
+});
+
+// Developer authentication routes
+Route::prefix('dev')->group(function () {
+    Route::post('/validate-magic-link', [DevAuthController::class, 'validateMagicLink']);
+    Route::post('/register', [DevAuthController::class, 'registerOrGrantAccess']);
+    Route::post('/login', [DevAuthController::class, 'login']);
+    
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/logout', [DevAuthController::class, 'logout']);
+        Route::get('/me', [DevAuthController::class, 'me']);
+        Route::get('/my-projects', [DevAuthController::class, 'myProjects']);
+        Route::get('/pending-counts', [DevAuthController::class, 'pendingCounts']);
+    });
 });
 
 // Public route for properties list (needed for sidebar)

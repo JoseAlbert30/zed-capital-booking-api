@@ -27,6 +27,9 @@ class FinancePenalty extends Model
         'receipt_sent_to_buyer',
         'receipt_sent_to_buyer_at',
         'receipt_sent_to_buyer_email',
+        'sent_to_buyer',
+        'sent_to_buyer_at',
+        'sent_to_buyer_email',
         'notification_sent',
         'notification_sent_at',
         'viewed_by_developer',
@@ -44,6 +47,8 @@ class FinancePenalty extends Model
         'receipt_uploaded_at' => 'datetime',
         'receipt_sent_to_buyer' => 'boolean',
         'receipt_sent_to_buyer_at' => 'datetime',
+        'sent_to_buyer' => 'boolean',
+        'sent_to_buyer_at' => 'datetime',
         'viewed_by_developer' => 'boolean',
         'viewed_by_admin' => 'boolean',
         'viewed_at' => 'datetime',
@@ -206,6 +211,16 @@ class FinancePenalty extends Model
                 'date' => $this->receipt_uploaded_at->timezone('Asia/Dubai')->format('Y-m-d'),
                 'time' => $this->receipt_uploaded_at->timezone('Asia/Dubai')->format('H:i:s'),
                 'user' => 'Developer',
+            ];
+        }
+
+        // Step 5.5: Invoice/Penalty Sent to Buyer (can happen after document upload or proof upload)
+        if ($this->sent_to_buyer_at) {
+            $timeline[] = [
+                'action' => 'Invoice Sent to Buyer',
+                'date' => $this->sent_to_buyer_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->sent_to_buyer_at->timezone('Asia/Dubai')->format('H:i:s'),
+                'user' => 'Admin',
             ];
         }
 

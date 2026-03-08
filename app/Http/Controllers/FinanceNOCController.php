@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\FinanceNOC;
 use App\Models\Property;
 use App\Models\DeveloperMagicLink;
+use App\Models\DevUser;
+use App\Models\FinanceAccess;
 use App\Events\FinanceNOCUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -24,10 +26,23 @@ class FinanceNOCController extends Controller
 
         // Check authentication type from middleware
         $authType = $request->attributes->get('auth_type');
+        $user = $request->user();
         
         if ($authType === 'developer') {
-            // Developer is authenticated via magic link - restrict to their project
-            $project = $request->attributes->get('developer_project');
+            // Validate developer has access to the requested project
+            if (!$project) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project parameter is required',
+                ], 400);
+            }
+            
+            if (!FinanceAccess::hasAccess($user->id, $project)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have access to this project',
+                ], 403);
+            }
         }
 
         $query = FinanceNOC::with(['creator:id,full_name,email', 'unit', 'attachments'])
@@ -169,14 +184,8 @@ class FinanceNOCController extends Controller
             ]);
             broadcast(new FinanceNOCUpdated($request->project_name, 'created', $nocData));
 
-            // Broadcast pending counts update to developer for this project
-            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
-                ->where('is_active', true)
-                ->value('developer_email');
-            
-            if ($developerEmail) {
-                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
-            }
+            // Broadcast pending counts update to developers with access to this project
+            $this->broadcastPendingCountsForProject($request->project_name);
 
             return response()->json([
                 'success' => true,
@@ -224,11 +233,7 @@ class FinanceNOCController extends Controller
             
             // Get developer name from middleware attributes
             $authType = $request->attributes->get('auth_type');
-            $developerName = 'Developer';
-            
-            if ($authType === 'developer') {
-                $developerName = $request->attributes->get('developer_name') ?? 'Developer';
-            }
+            $uploaderName = ($authType === 'developer' && $request->user()) ? $request->user()->name : 'Developer';
 
             // Store document with organized structure
             $fileName = 'NOC_' . $noc->noc_number . '_' . time() . '.' . $docFile->getClientOriginalExtension();
@@ -245,18 +250,15 @@ class FinanceNOCController extends Controller
             $noc->document_path = $docPath;
             $noc->document_name = $fileName;
             $noc->document_uploaded_at = now();
-            $noc->document_uploaded_by = $developerName;
+            $noc->document_uploaded_by = $uploaderName;
             $noc->save();
 
             // Send notification to admin team
-            $this->sendNOCDocumentUploadedNotificationToAdmin($noc, $developerName);
+            $this->sendNOCDocumentUploadedNotificationToAdmin($noc, $uploaderName);
 
-            // Broadcast pending counts update to developer
+            // Broadcast pending counts update to developers with access
             if ($authType === 'developer') {
-                $magicLink = $request->attributes->get('developer_magic_link');
-                if ($magicLink && $magicLink->developer_email) {
-                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
-                }
+                $this->broadcastPendingCountsForProject($noc->project_name);
             }
 
             $noc->load('creator:id,full_name,email', 'unit');
@@ -435,12 +437,17 @@ class FinanceNOCController extends Controller
 
             // Prepare email data
             $emailData = [
-                'nocNumber' => $noc->noc_number,
-                'nocName' => $noc->noc_name,
-                'unitNumber' => $noc->unit_number,
-                'description' => $noc->description,
-                'projectName' => $noc->project_name,
+                'subject' => "NOC Request: {$noc->noc_name} - Unit {$noc->unit_number}",
+                'transactionType' => 'NOC Request',
                 'developerName' => $property->developer_name ?? 'Developer',
+                'messageBody' => 'We are requesting a No Objection Certificate for the property mentioned below. Please review and upload the required documents at your earliest convenience.',
+                'details' => [
+                    'NOC Number' => $noc->noc_number,
+                    'NOC Name' => $noc->noc_name,
+                    'Unit Number' => $noc->unit_number,
+                    'Description' => $noc->description,
+                    'Project' => $noc->project_name,
+                ],
                 'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
             ];
 
@@ -450,7 +457,7 @@ class FinanceNOCController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.noc-request-notification', $emailData, function ($message) use ($property, $ccEmails, $noc) {
+            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $noc) {
                 $message->to($property->developer_email)
                     ->subject("NOC Request: {$noc->noc_name} - Unit {$noc->unit_number}");
                 
@@ -484,15 +491,22 @@ class FinanceNOCController extends Controller
             ];
 
             $emailData = [
-                'nocNumber' => $noc->noc_number,
-                'nocName' => $noc->noc_name,
-                'unitNumber' => $noc->unit_number,
-                'projectName' => $noc->project_name,
-                'developerName' => $developerName,
-                'documentUrl' => url($noc->document_url),
+                'subject' => "NOC Document Uploaded: {$noc->noc_name} - Unit {$noc->unit_number}",
+                'greeting' => 'NOC Document Upload Notification',
+                'transactionType' => 'NOC Document',
+                'messageBody' => "A No Objection Certificate has been uploaded by {$developerName} for the following property.",
+                'details' => [
+                    'NOC Number' => $noc->noc_number,
+                    'NOC Name' => $noc->noc_name,
+                    'Unit Number' => $noc->unit_number,
+                    'Project' => $noc->project_name,
+                    'Uploaded By' => $developerName,
+                ],
+                'buttonUrl' => url($noc->document_url),
+                'buttonText' => 'View NOC Document',
             ];
 
-            Mail::send('emails.noc-document-uploaded-notification', $emailData, function ($message) use ($adminEmails, $noc) {
+            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $noc) {
                 $message->to($adminEmails)
                     ->subject("NOC Document Uploaded: {$noc->noc_name} - Unit {$noc->unit_number}");
             });
@@ -524,11 +538,12 @@ class FinanceNOCController extends Controller
         }
 
         try {
-            // Get buyer email from unit finance emails
-            $buyerEmail = null;
-            $buyerName = 'Buyer';
+            // Get buyer email and name from request or unit finance emails
+            $buyerEmail = $request->input('to_email');
+            $buyerName = $request->input('recipient_name');
 
-            if ($noc->unit && $noc->unit->primaryFinanceEmail) {
+            // If not provided in request, get from unit
+            if (!$buyerEmail && $noc->unit && $noc->unit->primaryFinanceEmail) {
                 $financeEmail = $noc->unit->primaryFinanceEmail;
                 $buyerEmail = $financeEmail->email;
                 $buyerName = $financeEmail->recipient_name ?? 'Buyer';
@@ -541,20 +556,50 @@ class FinanceNOCController extends Controller
                 ], 400);
             }
 
+            // Save/update finance email if provided in request
+            if ($request->input('to_email') && $noc->unit_id) {
+                \App\Models\FinanceEmail::updateOrCreate(
+                    [
+                        'unit_id' => $noc->unit_id,
+                        'type' => 'buyer',
+                        'is_primary' => true,
+                    ],
+                    [
+                        'email' => $request->input('to_email'),
+                        'recipient_name' => $request->input('recipient_name', 'Buyer'),
+                    ]
+                );
+            }
+
             // Prepare email data
             $emailData = [
+                'subject' => "NOC Document - {$noc->noc_name}",
+                'transactionType' => 'No Objection Certificate',
                 'buyerName' => $buyerName,
-                'nocNumber' => $noc->noc_number,
-                'nocName' => $noc->noc_name,
-                'unitNumber' => $noc->unit_number,
-                'projectName' => $noc->project_name,
-                'documentUrl' => url('api/storage/' . $noc->document_path),
+                'messageBody' => 'Please find attached your No Objection Certificate for the property mentioned below.',
+                'details' => [
+                    'NOC Number' => $noc->noc_number,
+                    'NOC Name' => $noc->noc_name,
+                    'Unit Number' => $noc->unit_number,
+                    'Project' => $noc->project_name,
+                ],
+                'buttonUrl' => url('api/storage/' . $noc->document_path),
+                'buttonText' => 'View NOC Document',
             ];
 
-            // Send email
-            Mail::send('emails.noc-sent-to-buyer', $emailData, function ($message) use ($buyerEmail, $noc) {
+            // Send email with NOC document attachment
+            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $noc) {
                 $message->to($buyerEmail)
                     ->subject("NOC Document - {$noc->noc_name}");
+                
+                // Attach NOC document if it exists
+                if ($noc->document_path && \Storage::disk('public')->exists($noc->document_path)) {
+                    $filePath = storage_path('app/public/' . $noc->document_path);
+                    $message->attach($filePath, [
+                        'as' => $noc->document_name ?? 'NOC_Document.pdf',
+                        'mime' => mime_content_type($filePath)
+                    ]);
+                }
             });
 
             // Update NOC
@@ -666,6 +711,26 @@ class FinanceNOCController extends Controller
                 'success' => false,
                 'message' => 'Failed to delete attachment: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    /**
+     * Broadcast pending counts to all developers with access to a project
+     */
+    private function broadcastPendingCountsForProject(string $projectName)
+    {
+        try {
+            $devUserIds = FinanceAccess::where('project_name', $projectName)
+                ->where('is_active', true)
+                ->pluck('dev_user_id');
+
+            $devUsers = DevUser::whereIn('id', $devUserIds)->get();
+
+            foreach ($devUsers as $devUser) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($devUser->email);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Failed to broadcast pending counts: ' . $e->getMessage());
         }
     }
 }

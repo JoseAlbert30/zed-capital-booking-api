@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\FinanceSOA;
 use App\Models\Property;
 use App\Models\DeveloperMagicLink;
+use App\Models\DevUser;
+use App\Models\FinanceAccess;
 use App\Events\FinanceSOAUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -24,10 +26,23 @@ class FinanceSOAController extends Controller
 
         // Check authentication type from middleware
         $authType = $request->attributes->get('auth_type');
+        $user = $request->user();
         
         if ($authType === 'developer') {
-            // Developer is authenticated via magic link - restrict to their project
-            $project = $request->attributes->get('developer_project');
+            // Validate developer has access to the requested project
+            if (!$project) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project parameter is required',
+                ], 400);
+            }
+            
+            if (!FinanceAccess::hasAccess($user->id, $project)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have access to this project',
+                ], 403);
+            }
         }
 
         $query = FinanceSOA::with(['creator:id,full_name,email', 'unit', 'attachments'])
@@ -165,14 +180,8 @@ class FinanceSOAController extends Controller
             ]);
             broadcast(new FinanceSOAUpdated($request->project_name, 'created', $soaData));
 
-            // Broadcast pending counts update to developer for this project
-            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
-                ->where('is_active', true)
-                ->value('developer_email');
-            
-            if ($developerEmail) {
-                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
-            }
+            // Broadcast pending counts update to developers with access to this project
+            $this->broadcastPendingCountsForProject($request->project_name);
 
             return response()->json([
                 'success' => true,
@@ -247,12 +256,9 @@ class FinanceSOAController extends Controller
             // Send notification to admin team
             $this->sendSOADocumentUploadedNotificationToAdmin($soa, $developerName);
 
-            // Broadcast pending counts update to developer
+            // Broadcast pending counts update to developers with access
             if ($authType === 'developer') {
-                $magicLink = $request->attributes->get('developer_magic_link');
-                if ($magicLink && $magicLink->developer_email) {
-                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
-                }
+                $this->broadcastPendingCountsForProject($soa->project_name);
             }
 
             $soa->load('creator:id,full_name,email', 'unit');
@@ -429,11 +435,16 @@ class FinanceSOAController extends Controller
 
             // Prepare email data
             $emailData = [
-                'soaNumber' => $soa->soa_number,
-                'unitNumber' => $soa->unit_number,
-                'description' => $soa->description,
-                'projectName' => $soa->project_name,
+                'subject' => "SOA Request: Unit {$soa->unit_number} - {$soa->project_name}",
+                'transactionType' => 'SOA Request',
                 'developerName' => $property->developer_name ?? 'Developer',
+                'messageBody' => 'We are requesting a Statement of Account for the property mentioned below. Please review and upload the required documents at your earliest convenience.',
+                'details' => [
+                    'SOA Number' => $soa->soa_number,
+                    'Unit Number' => $soa->unit_number,
+                    'Description' => $soa->description,
+                    'Project' => $soa->project_name,
+                ],
                 'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
             ];
 
@@ -443,7 +454,7 @@ class FinanceSOAController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.soa-request-notification', $emailData, function ($message) use ($property, $ccEmails, $soa) {
+            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $soa) {
                 $message->to($property->developer_email)
                     ->subject("SOA Request: Unit {$soa->unit_number} - {$soa->project_name}");
                 
@@ -477,14 +488,21 @@ class FinanceSOAController extends Controller
             ];
 
             $emailData = [
-                'soaNumber' => $soa->soa_number,
-                'unitNumber' => $soa->unit_number,
-                'projectName' => $soa->project_name,
-                'developerName' => $developerName,
-                'documentUrl' => url($soa->document_url),
+                'subject' => "SOA Document Uploaded: Unit {$soa->unit_number} - {$soa->project_name}",
+                'greeting' => 'SOA Document Upload Notification',
+                'transactionType' => 'SOA Document',
+                'messageBody' => "A Statement of Account has been uploaded by {$developerName} for the following property.",
+                'details' => [
+                    'SOA Number' => $soa->soa_number,
+                    'Unit Number' => $soa->unit_number,
+                    'Project' => $soa->project_name,
+                    'Uploaded By' => $developerName,
+                ],
+                'buttonUrl' => url($soa->document_url),
+                'buttonText' => 'View SOA Document',
             ];
 
-            Mail::send('emails.soa-document-uploaded-notification', $emailData, function ($message) use ($adminEmails, $soa) {
+            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $soa) {
                 $message->to($adminEmails)
                     ->subject("SOA Document Uploaded: Unit {$soa->unit_number} - {$soa->project_name}");
             });
@@ -516,11 +534,12 @@ class FinanceSOAController extends Controller
         }
 
         try {
-            // Get buyer email from unit finance emails
-            $buyerEmail = null;
-            $buyerName = 'Buyer';
+            // Get buyer email and name from request or unit finance emails
+            $buyerEmail = $request->input('to_email');
+            $buyerName = $request->input('recipient_name');
 
-            if ($soa->unit && $soa->unit->primaryFinanceEmail) {
+            // If not provided in request, get from unit
+            if (!$buyerEmail && $soa->unit && $soa->unit->primaryFinanceEmail) {
                 $financeEmail = $soa->unit->primaryFinanceEmail;
                 $buyerEmail = $financeEmail->email;
                 $buyerName = $financeEmail->recipient_name ?? 'Buyer';
@@ -533,17 +552,38 @@ class FinanceSOAController extends Controller
                 ], 400);
             }
 
+            // Save/update finance email if provided in request
+            if ($request->input('to_email') && $soa->unit_id) {
+                \App\Models\FinanceEmail::updateOrCreate(
+                    [
+                        'unit_id' => $soa->unit_id,
+                        'type' => 'buyer',
+                        'is_primary' => true,
+                    ],
+                    [
+                        'email' => $request->input('to_email'),
+                        'recipient_name' => $request->input('recipient_name', 'Buyer'),
+                    ]
+                );
+            }
+
             // Prepare email data
             $emailData = [
+                'subject' => "Statement of Account - Unit {$soa->unit_number}",
+                'transactionType' => 'Statement of Account',
                 'buyerName' => $buyerName,
-                'soaNumber' => $soa->soa_number,
-                'unitNumber' => $soa->unit_number,
-                'projectName' => $soa->project_name,
-                'documentUrl' => url('api/storage/' . $soa->document_path),
+                'messageBody' => 'Please find attached your Statement of Account for the property mentioned below. Review the details carefully.',
+                'details' => [
+                    'SOA Number' => $soa->soa_number,
+                    'Unit Number' => $soa->unit_number,
+                    'Project' => $soa->project_name,
+                ],
+                'buttonUrl' => url('api/storage/' . $soa->document_path),
+                'buttonText' => 'View SOA Document',
             ];
 
             // Send email
-            Mail::send('emails.soa-sent-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
+            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
                 $message->to($buyerEmail)
                     ->subject("Statement of Account - Unit {$soa->unit_number}");
             });
@@ -637,17 +677,32 @@ class FinanceSOAController extends Controller
 
             // Prepare email data
             $emailData = [
+                'subject' => "Statement of Account - Unit {$soa->unit_number}",
+                'transactionType' => 'Statement of Account',
                 'buyerName' => $buyerName,
-                'soaNumber' => $soa->soa_number,
-                'unitNumber' => $soa->unit_number,
-                'projectName' => $soa->project_name,
-                'documentUrl' => url('api/storage/' . $soa->document_path),
+                'messageBody' => 'Please find attached your Statement of Account for the property mentioned below. Review the details carefully.',
+                'details' => [
+                    'SOA Number' => $soa->soa_number,
+                    'Unit Number' => $soa->unit_number,
+                    'Project' => $soa->project_name,
+                ],
+                'buttonUrl' => url('api/storage/' . $soa->document_path),
+                'buttonText' => 'View SOA Document',
             ];
 
-            // Send email
-            Mail::send('emails.soa-sent-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
+            // Send email with SOA document attachment
+            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
                 $message->to($buyerEmail)
                     ->subject("Statement of Account - Unit {$soa->unit_number}");
+                
+                // Attach SOA document if it exists
+                if ($soa->document_path && \Storage::disk('public')->exists($soa->document_path)) {
+                    $filePath = storage_path('app/public/' . $soa->document_path);
+                    $message->attach($filePath, [
+                        'as' => $soa->document_name ?? 'SOA_Document.pdf',
+                        'mime' => mime_content_type($filePath)
+                    ]);
+                }
             });
 
             return response()->json([
@@ -739,6 +794,26 @@ class FinanceSOAController extends Controller
                 'success' => false,
                 'message' => 'Failed to delete attachment: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    /**
+     * Broadcast pending counts to all developers with access to a project
+     */
+    private function broadcastPendingCountsForProject(string $projectName)
+    {
+        try {
+            $devUserIds = FinanceAccess::where('project_name', $projectName)
+                ->where('is_active', true)
+                ->pluck('dev_user_id');
+
+            $devUsers = DevUser::whereIn('id', $devUserIds)->get();
+
+            foreach ($devUsers as $devUser) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($devUser->email);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Failed to broadcast pending counts: ' . $e->getMessage());
         }
     }
 }

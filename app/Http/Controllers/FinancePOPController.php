@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\FinancePOP;
 use App\Models\DeveloperMagicLink;
 use App\Models\Property;
+use App\Models\DevUser;
+use App\Models\FinanceAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -23,10 +25,23 @@ class FinancePOPController extends Controller
 
         // Check authentication type from middleware
         $authType = $request->attributes->get('auth_type');
+        $user = $request->user();
         
         if ($authType === 'developer') {
-            // Developer is authenticated via magic link - restrict to their project
-            $project = $request->attributes->get('developer_project');
+            // Validate developer has access to the requested project
+            if (!$project) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project parameter is required',
+                ], 400);
+            }
+            
+            if (!FinanceAccess::hasAccess($user->id, $project)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have access to this project',
+                ], 403);
+            }
         }
 
         $query = FinancePOP::with(['creator:id,full_name,email', 'unit'])
@@ -161,14 +176,8 @@ class FinancePOPController extends Controller
 
             broadcast(new \App\Events\FinancePOPUpdated($pop->project_name, 'created', $popData));
 
-            // Broadcast pending counts update to developer for this project
-            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
-                ->where('is_active', true)
-                ->value('developer_email');
-            
-            if ($developerEmail) {
-                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
-            }
+            // Broadcast pending counts update to developers with access to this project
+            $this->broadcastPendingCountsForProject($request->project_name);
 
             return response()->json([
                 'success' => true,
@@ -346,6 +355,20 @@ class FinancePOPController extends Controller
     public function getProjectSettings(Request $request, $projectName)
     {
         try {
+            // Check authentication type from middleware
+            $authType = $request->attributes->get('auth_type');
+            $user = $request->user();
+            
+            if ($authType === 'developer') {
+                // Validate developer has access to the requested project
+                if (!FinanceAccess::hasAccess($user->id, $projectName)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You do not have access to this project',
+                    ], 403);
+                }
+            }
+            
             $property = Property::where('project_name', $projectName)->first();
 
             if (!$property) {
@@ -454,27 +477,19 @@ class FinancePOPController extends Controller
             $storagePath = 'finance/' . $pop->project_name . '/' . $pop->unit_number;
             $receiptPath = $receiptFile->storeAs($storagePath, $receiptFileName, 'public');
 
-            // Get developer info from middleware or request
+            // Get developer name from authenticated user
             $authType = $request->attributes->get('auth_type');
-            $developerName = 'Developer';
-            
-            if ($authType === 'developer') {
-                // Get developer name from magic link
-                $magicLink = $request->attributes->get('developer_magic_link');
-                if ($magicLink && $magicLink->developer_name) {
-                    $developerName = $magicLink->developer_name;
-                }
-            }
+            $uploaderName = ($authType === 'developer' && $request->user()) ? $request->user()->name : 'Developer';
 
             // Update POP with receipt info
             $pop->receipt_path = $receiptPath;
             $pop->receipt_name = $receiptFileName;
             $pop->receipt_uploaded_at = now();
-            $pop->receipt_uploaded_by = $developerName;
+            $pop->receipt_uploaded_by = $uploaderName;
             $pop->save();
 
             // Send email notification to admin
-            $this->sendReceiptUploadedNotificationToAdmin($pop, $developerName);
+            $this->sendReceiptUploadedNotificationToAdmin($pop, $uploaderName);
 
             $pop->load('creator:id,full_name,email', 'unit');
 
@@ -482,12 +497,9 @@ class FinancePOPController extends Controller
 
             broadcast(new \App\Events\FinancePOPUpdated($pop->project_name, 'receipt-uploaded', $popData));
 
-            // Broadcast pending counts update to developer
+            // Broadcast pending counts update to developers with access
             if ($authType === 'developer') {
-                $magicLink = $request->attributes->get('developer_magic_link');
-                if ($magicLink && $magicLink->developer_email) {
-                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
-                }
+                $this->broadcastPendingCountsForProject($pop->project_name);
             }
 
             return response()->json([
@@ -518,15 +530,21 @@ class FinancePOPController extends Controller
             ];
 
             $emailData = [
-                'popNumber' => $pop->pop_number,
-                'unitNumber' => $pop->unit_number,
-                'amount' => $pop->amount,
-                'projectName' => $pop->project_name,
-                'developerName' => $developerName,
-                'receiptUrl' => url($pop->receipt_url),
+                'subject' => "Receipt Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}",
+                'greeting' => 'Receipt Upload Notification',
+                'transactionType' => 'POP Receipt',
+                'messageBody' => "A receipt has been uploaded by {$developerName} for the following POP.",
+                'details' => [
+                    'POP Number' => $pop->pop_number,
+                    'Unit Number' => $pop->unit_number,
+                    'Project' => $pop->project_name,
+                    'Uploaded By' => $developerName,
+                ],
+                'buttonUrl' => url($pop->receipt_url),
+                'buttonText' => 'View Receipt',
             ];
 
-            Mail::send('emails.receipt-uploaded-notification', $emailData, function ($message) use ($adminEmails, $pop) {
+            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $pop) {
                 $message->to($adminEmails)
                     ->subject("Receipt Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}");
             });
@@ -654,15 +672,24 @@ class FinancePOPController extends Controller
 
             // Prepare email data
             $emailData = [
-                'popNumber' => $pop->pop_number,
-                'unitNumber' => $pop->unit_number,
-                'amount' => $pop->amount,
-                'projectName' => $pop->project_name,
+                'subject' => "SOA Request for POP {$pop->pop_number} - Unit {$pop->unit_number}",
+                'transactionType' => 'POP - SOA Request',
                 'developerName' => $property->developer_name ?? 'Developer',
-                'receiptNumber' => $pop->receipt_name,
+                'messageBody' => 'We are requesting a Statement of Account (SOA) for the following POP. Please upload the SOA documents at your earliest convenience.',
+                'details' => [
+                    'POP Number' => $pop->pop_number,
+                    'Unit Number' => $pop->unit_number,
+                    'Project' => $pop->project_name,
+                    'Receipt Number' => $pop->receipt_name,
+                    'Notes' => $pop->notes,
+                ],
                 'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
-                'popUrl' => url($pop->attachment_url),
-                'receiptUrl' => url($pop->receipt_url),
+                'buttonUrl' => url($pop->attachment_url),
+                'buttonText' => 'View POP Document',
+                'additionalInfo' => [
+                    'title' => 'Action Required',
+                    'message' => 'Please log in to the developer portal using the button above to upload the SOA documents.'
+                ],
             ];
 
             // Prepare CC emails
@@ -671,7 +698,7 @@ class FinancePOPController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.soa-request-notification', $emailData, function ($message) use ($property, $ccEmails, $pop) {
+            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $pop) {
                 $message->to($property->developer_email)
                     ->subject("SOA Request for POP {$pop->pop_number} - Unit {$pop->unit_number}");
                 
@@ -721,13 +748,9 @@ class FinancePOPController extends Controller
         try {
             $soaFile = $request->file('soa_docs');
             
-            // Get developer name from middleware attributes (if developer) or default
+            // Get developer name from authenticated user
             $authType = $request->attributes->get('auth_type');
-            $developerName = 'Developer';
-            
-            if ($authType === 'developer') {
-                $developerName = $request->attributes->get('developer_name') ?? 'Developer';
-            }
+            $uploaderName = $authType === 'developer' && $request->user() ? $request->user()->name : 'Developer';
 
             // Store SOA with organized structure: finance/{project_name}/{unit_no}/
             $fileName = 'SOA_' . $pop->pop_number . '_' . time() . '.' . $soaFile->getClientOriginalExtension();
@@ -744,11 +767,11 @@ class FinancePOPController extends Controller
             $pop->soa_docs_path = $soaPath;
             $pop->soa_docs_name = $fileName;
             $pop->soa_docs_uploaded_at = now();
-            $pop->soa_uploaded_by = $developerName;
+            $pop->soa_uploaded_by = $uploaderName;
             $pop->save();
 
             // Send notification to admin team
-            $this->sendSOAUploadedNotificationToAdmin($pop, $developerName);
+            $this->sendSOAUploadedNotificationToAdmin($pop, $uploaderName);
 
             $pop->load('creator:id,full_name,email', 'unit');
 
@@ -800,17 +823,21 @@ class FinancePOPController extends Controller
             ];
 
             $emailData = [
-                'popNumber' => $pop->pop_number,
-                'unitNumber' => $pop->unit_number,
-                'amount' => $pop->amount,
-                'projectName' => $pop->project_name,
-                'developerName' => $developerName,
-                'soaUrl' => url($pop->soa_docs_url),
-                'popUrl' => url($pop->attachment_url),
-                'receiptUrl' => url($pop->receipt_url),
+                'subject' => "SOA Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}",
+                'greeting' => 'SOA Upload Notification',
+                'transactionType' => 'POP - SOA Upload',
+                'messageBody' => "A Statement of Account has been uploaded by {$developerName} for the following POP.",
+                'details' => [
+                    'POP Number' => $pop->pop_number,
+                    'Unit Number' => $pop->unit_number,
+                    'Project' => $pop->project_name,
+                    'Uploaded By' => $developerName,
+                ],
+                'buttonUrl' => url($pop->soa_docs_url),
+                'buttonText' => 'View SOA Documents',
             ];
 
-            Mail::send('emails.soa-uploaded-notification', $emailData, function ($message) use ($adminEmails, $pop) {
+            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $pop) {
                 $message->to($adminEmails)
                     ->subject("SOA Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}");
             });
@@ -917,10 +944,38 @@ class FinancePOPController extends Controller
                 );
             }
 
+            // Prepare CC emails
+            $ccEmails = [];
+            if ($property->cc_emails) {
+                $ccEmails = array_map('trim', explode(',', $property->cc_emails));
+            }
+
+            // Prepare email data
+            $emailData = [
+                'subject' => 'New Payment - Proof of Payment Received - ' . $pop->pop_number,
+                'transactionType' => 'POP Document',
+                'developerName' => $property->developer_name ?? 'Developer',
+                'messageBody' => 'A new Proof of Payment has been submitted and requires your attention. Please log in to the developer portal to review and process this document.',
+                'details' => [
+                    'POP Number' => $pop->pop_number,
+                    'Unit Number' => $pop->unit_number,
+                    'Project' => $pop->project_name,
+                    'Notes' => $pop->notes,
+                ],
+                'magicLink' => config('app.frontend_url') . '/developer/portal?token=' . $magicLink->token,
+                'buttonUrl' => config('app.frontend_url') . '/developer/portal?token=' . $magicLink->token,
+                'buttonText' => 'Access Developer Portal',
+            ];
+
             // Send email
-            Mail::to($property->developer_email)->send(
-                new POPDeveloperNotification($pop, $magicLink, $property->cc_emails)
-            );
+            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $pop) {
+                $message->to($property->developer_email)
+                    ->subject('New Payment - Proof of Payment Received - ' . $pop->pop_number);
+                
+                if (!empty($ccEmails)) {
+                    $message->cc($ccEmails);
+                }
+            });
 
             // Update POP notification status
             $pop->notification_sent = true;
@@ -955,11 +1010,12 @@ class FinancePOPController extends Controller
         }
 
         try {
-            // Get buyer email from unit finance emails
-            $buyerEmail = null;
-            $buyerName = 'Buyer';
+            // Get buyer email and name from request or unit finance emails
+            $buyerEmail = $request->input('to_email');
+            $buyerName = $request->input('recipient_name');
 
-            if ($pop->unit && $pop->unit->primaryFinanceEmail) {
+            // If not provided in request, get from unit
+            if (!$buyerEmail && $pop->unit && $pop->unit->primaryFinanceEmail) {
                 $financeEmail = $pop->unit->primaryFinanceEmail;
                 $buyerEmail = $financeEmail->email;
                 $buyerName = $financeEmail->recipient_name ?? 'Buyer';
@@ -972,19 +1028,49 @@ class FinancePOPController extends Controller
                 ], 400);
             }
 
+            // Save/update finance email if provided in request
+            if ($request->input('to_email') && $pop->unit_id) {
+                \App\Models\FinanceEmail::updateOrCreate(
+                    [
+                        'unit_id' => $pop->unit_id,
+                        'type' => 'buyer',
+                        'is_primary' => true,
+                    ],
+                    [
+                        'email' => $request->input('to_email'),
+                        'recipient_name' => $request->input('recipient_name', 'Buyer'),
+                    ]
+                );
+            }
+
             // Prepare email data
             $emailData = [
+                'subject' => "Payment Receipt - Unit {$pop->unit_number}",
+                'transactionType' => 'POP Receipt',
                 'buyerName' => $buyerName,
-                'popNumber' => $pop->pop_number,
-                'unitNumber' => $pop->unit_number,
-                'projectName' => $pop->project_name,
-                'receiptUrl' => url('api/storage/' . $pop->receipt_path),
+                'messageBody' => 'Thank you for your payment. Please find attached your payment receipt for your reference.',
+                'details' => [
+                    'POP Number' => $pop->pop_number,
+                    'Unit Number' => $pop->unit_number,
+                    'Project' => $pop->project_name,
+                ],
+                'buttonUrl' => url('api/storage/' . $pop->receipt_path),
+                'buttonText' => 'View Receipt',
             ];
 
-            // Send email
-            Mail::send('emails.receipt-sent-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop) {
+            // Send email with receipt attachment
+            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop) {
                 $message->to($buyerEmail)
                     ->subject("Payment Receipt - Unit {$pop->unit_number}");
+                
+                // Attach receipt file if it exists
+                if ($pop->receipt_path && \Storage::disk('public')->exists($pop->receipt_path)) {
+                    $filePath = storage_path('app/public/' . $pop->receipt_path);
+                    $message->attach($filePath, [
+                        'as' => $pop->receipt_name ?? 'Receipt.pdf',
+                        'mime' => mime_content_type($filePath)
+                    ]);
+                }
             });
 
             // Update POP
@@ -1015,6 +1101,27 @@ class FinancePOPController extends Controller
                 'success' => false,
                 'message' => 'Failed to send receipt to buyer: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    /**
+     * Broadcast pending counts to all developers with access to a project
+     */
+    private function broadcastPendingCountsForProject(string $projectName)
+    {
+        try {
+            // Get all dev users with access to this project
+            $devUserIds = FinanceAccess::where('project_name', $projectName)
+                ->where('is_active', true)
+                ->pluck('dev_user_id');
+
+            $devUsers = DevUser::whereIn('id', $devUserIds)->get();
+
+            foreach ($devUsers as $devUser) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($devUser->email);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Failed to broadcast pending counts: ' . $e->getMessage());
         }
     }
 }

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\FinancePenalty;
 use App\Models\Property;
 use App\Models\DeveloperMagicLink;
+use App\Models\DevUser;
+use App\Models\FinanceAccess;
 use App\Events\FinancePenaltyUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -24,10 +26,23 @@ class FinancePenaltyController extends Controller
 
         // Check authentication type from middleware
         $authType = $request->attributes->get('auth_type');
+        $user = $request->user();
         
         if ($authType === 'developer') {
-            // Developer is authenticated via magic link - restrict to their project
-            $project = $request->attributes->get('developer_project');
+            // Validate developer has access to the requested project
+            if (!$project) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project parameter is required',
+                ], 400);
+            }
+            
+            if (!FinanceAccess::hasAccess($user->id, $project)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have access to this project',
+                ], 403);
+            }
         }
 
         $query = FinancePenalty::with(['creator:id,full_name,email', 'unit', 'attachments', 'property'])
@@ -50,12 +65,17 @@ class FinancePenaltyController extends Controller
                     'unitId' => $penalty->unit_id,
                     'description' => $penalty->description,
                     'penaltyInitiatedBy' => $penalty->property?->penalty_initiated_by ?? 'admin',
+                    'documentUrl' => $this->stripStorageUrl($penalty->document_url),
+                    'documentName' => $penalty->document_name,
                     'proofOfPaymentUrl' => $this->stripStorageUrl($penalty->proof_of_payment_url),
                     'proofOfPaymentName' => $penalty->proof_of_payment_name,
                     'receiptUrl' => $this->stripStorageUrl($penalty->receipt_url),
                     'receiptName' => $penalty->receipt_name,
                     'receiptSentToBuyer' => $penalty->receipt_sent_to_buyer,
                     'receiptSentToBuyerAt' => $penalty->receipt_sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                    'sentToBuyer' => $penalty->sent_to_buyer,
+                    'sentToBuyerAt' => $penalty->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                    'hasDocumentOrAttachment' => !empty($penalty->document_path) || $penalty->attachments->isNotEmpty(),
                     'date' => $penalty->created_at->format('Y-m-d'),
                     'notificationSent' => $penalty->notification_sent,
                     'viewedByDeveloper' => $penalty->viewed_by_developer,
@@ -209,14 +229,8 @@ class FinancePenaltyController extends Controller
             // Broadcast event
             broadcast(new FinancePenaltyUpdated($penalty->project_name, 'created', $penaltyData));
 
-            // Broadcast pending counts update to developer for this project
-            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
-                ->where('is_active', true)
-                ->value('developer_email');
-            
-            if ($developerEmail) {
-                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
-            }
+            // Broadcast pending counts update to developers with access to this project
+            $this->broadcastPendingCountsForProject($request->project_name);
 
             return response()->json([
                 'success' => true,
@@ -498,13 +512,17 @@ class FinancePenaltyController extends Controller
 
             // Prepare email data
             $emailData = [
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'amount' => $penalty->amount,
-                'description' => $penalty->description,
-                'projectName' => $penalty->project_name,
+                'subject' => "Penalty Notice: {$penalty->penalty_name} - Unit {$penalty->unit_number}",
+                'transactionType' => 'Penalty Notice',
                 'developerName' => $property->developer_name ?? 'Developer',
+                'messageBody' => 'A penalty notice has been issued for the property mentioned below. Please review the details and take necessary action.',
+                'details' => [
+                    'Penalty Number' => $penalty->penalty_number,
+                    'Penalty Name' => $penalty->penalty_name,
+                    'Unit Number' => $penalty->unit_number,
+                    'Description' => $penalty->description,
+                    'Project' => $penalty->project_name,
+                ],
                 'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
             ];
 
@@ -514,7 +532,7 @@ class FinancePenaltyController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.penalty-request-notification', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
+            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
                 $message->to($property->developer_email)
                     ->subject("Penalty Notice: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
                 
@@ -548,16 +566,22 @@ class FinancePenaltyController extends Controller
             ];
 
             $emailData = [
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'amount' => $penalty->amount,
-                'projectName' => $penalty->project_name,
-                'developerName' => $developerName,
-                'documentUrl' => url($penalty->document_url),
+                'subject' => "Penalty Document Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}",
+                'greeting' => 'Penalty Document Upload Notification',
+                'transactionType' => 'Penalty Document',
+                'messageBody' => "A penalty document has been uploaded by {$developerName} for the following penalty.",
+                'details' => [
+                    'Penalty Number' => $penalty->penalty_number,
+                    'Penalty Name' => $penalty->penalty_name,
+                    'Unit Number' => $penalty->unit_number,
+                    'Project' => $penalty->project_name,
+                    'Uploaded By' => $developerName,
+                ],
+                'buttonUrl' => url($penalty->document_url),
+                'buttonText' => 'View Document',
             ];
 
-            Mail::send('emails.penalty-document-uploaded-notification', $emailData, function ($message) use ($adminEmails, $penalty) {
+            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $penalty) {
                 $message->to($adminEmails)
                     ->subject("Penalty Document Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
             });
@@ -595,14 +619,19 @@ class FinancePenaltyController extends Controller
             }
 
             $emailData = [
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'amount' => $penalty->amount,
-                'projectName' => $penalty->project_name,
+                'subject' => "Penalty Document Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}",
+                'transactionType' => 'Penalty Document',
                 'developerName' => $property->developer_name ?? 'Developer',
-                'documentUrl' => url($penalty->document_url),
+                'messageBody' => 'A penalty document has been uploaded by the admin team for your review. Please log in to the developer portal to view and process this document.',
+                'details' => [
+                    'Penalty Number' => $penalty->penalty_number,
+                    'Penalty Name' => $penalty->penalty_name,
+                    'Unit Number' => $penalty->unit_number,
+                    'Project' => $penalty->project_name,
+                ],
                 'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
+                'buttonUrl' => url($penalty->document_url),
+                'buttonText' => 'View Document',
             ];
 
             // Prepare CC emails
@@ -611,7 +640,7 @@ class FinancePenaltyController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.penalty-admin-uploaded-document', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
+            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
                 $message->to($property->developer_email)
                     ->subject("Penalty Document Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
                 
@@ -714,13 +743,23 @@ class FinancePenaltyController extends Controller
             ]);
 
             $emailData = [
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'projectName' => $penalty->project_name,
+                'subject' => "Proof of Payment Uploaded - Action Required: {$penalty->penalty_name} - Unit {$penalty->unit_number}",
+                'transactionType' => 'Penalty - Proof of Payment',
                 'developerName' => $property->developer_name ?? 'Developer',
-                'proofUrl' => url($penalty->proof_of_payment_url),
+                'messageBody' => 'A proof of payment has been uploaded for the penalty mentioned below. Please review and upload the corresponding receipt.',
+                'details' => [
+                    'Penalty Number' => $penalty->penalty_number,
+                    'Penalty Name' => $penalty->penalty_name,
+                    'Unit Number' => $penalty->unit_number,
+                    'Project' => $penalty->project_name,
+                ],
                 'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
+                'buttonUrl' => url($penalty->proof_of_payment_url),
+                'buttonText' => 'View Proof of Payment',
+                'additionalInfo' => [
+                    'title' => 'Action Required',
+                    'message' => 'Please upload the official receipt for this payment as soon as possible.'
+                ],
             ];
 
             // Prepare CC emails
@@ -729,7 +768,7 @@ class FinancePenaltyController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.penalty-proof-uploaded', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
+            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
                 $message->to($property->developer_email)
                     ->subject("Proof of Payment Uploaded - Action Required: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
                 
@@ -794,13 +833,10 @@ class FinancePenaltyController extends Controller
             // Broadcast event
             broadcast(new FinancePenaltyUpdated($penalty->project_name, 'receipt-uploaded', $penaltyData));
 
-            // Broadcast pending counts update to developer
+            // Broadcast pending counts update to developers with access
             $authType = $request->attributes->get('auth_type');
             if ($authType === 'developer') {
-                $magicLink = $request->attributes->get('developer_magic_link');
-                if ($magicLink && $magicLink->developer_email) {
-                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
-                }
+                $this->broadcastPendingCountsForProject($penalty->project_name);
             }
 
             // Notify admin about receipt upload
@@ -833,17 +869,24 @@ class FinancePenaltyController extends Controller
             }
 
             $emailData = [
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'projectName' => $penalty->project_name,
-                'receiptUrl' => url($penalty->receipt_url),
+                'subject' => "Penalty Receipt Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}",
+                'greeting' => 'Receipt Upload Notification',
+                'transactionType' => 'Penalty Receipt',
+                'messageBody' => 'A receipt has been uploaded for the penalty mentioned below.',
+                'details' => [
+                    'Penalty Number' => $penalty->penalty_number,
+                    'Penalty Name' => $penalty->penalty_name,
+                    'Unit Number' => $penalty->unit_number,
+                    'Project' => $penalty->project_name,
+                ],
+                'buttonUrl' => url($penalty->receipt_url),
+                'buttonText' => 'View Receipt',
             ];
 
             // Send to admin email or configured emails
             $adminEmail = env('ADMIN_EMAIL', 'admin@zedcapital.com');
 
-            Mail::send('emails.penalty-receipt-uploaded', $emailData, function ($message) use ($penalty, $adminEmail) {
+            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($penalty, $adminEmail) {
                 $message->to($adminEmail)
                     ->subject("Penalty Receipt Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
             });
@@ -875,11 +918,12 @@ class FinancePenaltyController extends Controller
         }
 
         try {
-            // Get buyer email from unit finance emails
-            $buyerEmail = null;
-            $buyerName = 'Buyer';
+            // Get buyer email and name from request or unit finance emails
+            $buyerEmail = $request->input('to_email');
+            $buyerName = $request->input('recipient_name');
 
-            if ($penalty->unit && $penalty->unit->primaryFinanceEmail) {
+            // If not provided in request, get from unit
+            if (!$buyerEmail && $penalty->unit && $penalty->unit->primaryFinanceEmail) {
                 $financeEmail = $penalty->unit->primaryFinanceEmail;
                 $buyerEmail = $financeEmail->email;
                 $buyerName = $financeEmail->recipient_name ?? 'Buyer';
@@ -892,18 +936,48 @@ class FinancePenaltyController extends Controller
                 ], 400);
             }
 
+            // Save/update finance email if provided in request
+            if ($request->input('to_email') && $penalty->unit_id) {
+                \App\Models\FinanceEmail::updateOrCreate(
+                    [
+                        'unit_id' => $penalty->unit_id,
+                        'type' => 'buyer',
+                        'is_primary' => true,
+                    ],
+                    [
+                        'email' => $request->input('to_email'),
+                        'recipient_name' => $request->input('recipient_name', 'Buyer'),
+                    ]
+                );
+            }
+
             $emailData = [
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'projectName' => $penalty->project_name,
+                'subject' => "Penalty Payment Receipt: {$penalty->penalty_name} - Unit {$penalty->unit_number}",
+                'transactionType' => 'Penalty Receipt',
                 'buyerName' => $buyerName,
-                'receiptUrl' => url($penalty->receipt_url),
+                'messageBody' => 'Thank you for your payment. Please find attached your payment receipt for the penalty mentioned below.',
+                'details' => [
+                    'Penalty Number' => $penalty->penalty_number,
+                    'Penalty Name' => $penalty->penalty_name,
+                    'Unit Number' => $penalty->unit_number,
+                    'Project' => $penalty->project_name,
+                ],
+                'buttonUrl' => url($penalty->receipt_url),
+                'buttonText' => 'View Receipt',
             ];
 
-            Mail::send('emails.penalty-receipt-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
+            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
                 $message->to($buyerEmail)
                     ->subject("Penalty Payment Receipt: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
+                
+                // Attach receipt file if it exists
+                if ($penalty->receipt_path && \Storage::disk('public')->exists($penalty->receipt_path)) {
+                    $filePath = storage_path('app/public/' . $penalty->receipt_path);
+                    $message->attach($filePath, [
+                        'as' => $penalty->receipt_name ?? 'Penalty_Receipt.pdf',
+                        'mime' => mime_content_type($filePath)
+                    ]);
+                }
             });
 
             $penalty->receipt_sent_to_buyer = true;
@@ -939,7 +1013,7 @@ class FinancePenaltyController extends Controller
      */
     public function sendToBuyer(Request $request, $id)
     {
-        $penalty = FinancePenalty::with('unit.primaryFinanceEmail')->find($id);
+        $penalty = FinancePenalty::with(['unit.primaryFinanceEmail', 'attachments'])->find($id);
 
         if (!$penalty) {
             return response()->json([
@@ -948,19 +1022,21 @@ class FinancePenaltyController extends Controller
             ], 404);
         }
 
-        if (!$penalty->document_path) {
+        // Check if penalty has either a document or attachments
+        if (!$penalty->document_path && $penalty->attachments->isEmpty()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Penalty document has not been uploaded yet',
+                'message' => 'Penalty must have a document or attachments before sending to buyer',
             ], 400);
         }
 
         try {
-            // Get buyer email from unit finance emails
-            $buyerEmail = null;
-            $buyerName = 'Buyer';
+            // Get buyer email and name from request or unit finance emails
+            $buyerEmail = $request->input('to_email');
+            $buyerName = $request->input('recipient_name');
 
-            if ($penalty->unit && $penalty->unit->primaryFinanceEmail) {
+            // If not provided in request, get from unit
+            if (!$buyerEmail && $penalty->unit && $penalty->unit->primaryFinanceEmail) {
                 $financeEmail = $penalty->unit->primaryFinanceEmail;
                 $buyerEmail = $financeEmail->email;
                 $buyerName = $financeEmail->recipient_name ?? 'Buyer';
@@ -973,20 +1049,70 @@ class FinancePenaltyController extends Controller
                 ], 400);
             }
 
+            // Save/update finance email if provided in request
+            if ($request->input('to_email') && $penalty->unit_id) {
+                \App\Models\FinanceEmail::updateOrCreate(
+                    [
+                        'unit_id' => $penalty->unit_id,
+                        'type' => 'buyer',
+                        'is_primary' => true,
+                    ],
+                    [
+                        'email' => $request->input('to_email'),
+                        'recipient_name' => $request->input('recipient_name', 'Buyer'),
+                    ]
+                );
+            }
+
             // Prepare email data
             $emailData = [
+                'subject' => "Penalty Notice - {$penalty->penalty_name}",
+                'transactionType' => 'Penalty Notice',
                 'buyerName' => $buyerName,
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'projectName' => $penalty->project_name,
-                'documentUrl' => url('api/storage/' . $penalty->document_path),
+                'messageBody' => 'We are writing to inform you about a penalty that has been issued for your property. Please review the details below.',
+                'details' => [
+                    'Penalty Number' => $penalty->penalty_number,
+                    'Penalty Name' => $penalty->penalty_name,
+                    'Unit Number' => $penalty->unit_number,
+                    'Project' => $penalty->project_name,
+                ],
+                'additionalInfo' => [
+                    'title' => 'Important Information',
+                    'message' => 'Please review the attached penalty document and contact us if you have any questions or concerns.'
+                ],
             ];
 
-            // Send email
-            Mail::send('emails.penalty-sent-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
+            // Add button URL only if there's a main document
+            if ($penalty->document_path) {
+                $emailData['buttonUrl'] = url('api/storage/' . $penalty->document_path);
+                $emailData['buttonText'] = 'View Penalty Document';
+            }
+
+            // Send email with penalty document attachment
+            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
                 $message->to($buyerEmail)
                     ->subject("Penalty Notice - {$penalty->penalty_name}");
+                
+                // Attach penalty document/invoice if it exists
+                if ($penalty->document_path && \Storage::disk('public')->exists($penalty->document_path)) {
+                    $filePath = storage_path('app/public/' . $penalty->document_path);
+                    $message->attach($filePath, [
+                        'as' => $penalty->document_name ?? 'Penalty_Invoice.pdf',
+                        'mime' => mime_content_type($filePath)
+                    ]);
+                }
+                
+                // Also attach any additional attachments
+                $penalty->load('attachments');
+                foreach ($penalty->attachments as $attachment) {
+                    $attachmentPath = storage_path('app/public/' . $attachment->file_path);
+                    if (file_exists($attachmentPath)) {
+                        $message->attach($attachmentPath, [
+                            'as' => $attachment->filename,
+                            'mime' => mime_content_type($attachmentPath)
+                        ]);
+                    }
+                }
             });
 
             // Update penalty
@@ -1115,19 +1241,26 @@ class FinancePenaltyController extends Controller
                 'wbd@zedcapital.ae',
             ];
 
+            $developerName = $property->developer_name ?? 'Developer';
             $emailData = [
-                'penaltyNumber' => $penalty->penalty_number,
-                'penaltyName' => $penalty->penalty_name,
-                'unitNumber' => $penalty->unit_number,
-                'amount' => $penalty->amount,
-                'description' => $penalty->description,
-                'notes' => $penalty->notes,
-                'projectName' => $penalty->project_name,
-                'developerName' => $property->developer_name ?? 'Developer',
-                'dashboardLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/admin/finance?project=' . urlencode($penalty->project_name),
+                'subject' => "New Penalty Submitted by Developer: {$penalty->penalty_name} - Unit {$penalty->unit_number}",
+                'greeting' => 'New Penalty Notification',
+                'transactionType' => 'Penalty Submission',
+                'messageBody' => "A new penalty has been submitted by {$developerName} and requires your review.",
+                'details' => [
+                    'Penalty Number' => $penalty->penalty_number,
+                    'Penalty Name' => $penalty->penalty_name,
+                    'Unit Number' => $penalty->unit_number,
+                    'Description' => $penalty->description,
+                    'Notes' => $penalty->notes,
+                    'Project' => $penalty->project_name,
+                    'Developer' => $property->developer_name ?? 'Developer',
+                ],
+                'buttonUrl' => env('FRONTEND_URL', 'http://localhost:3000') . '/admin/finance?project=' . urlencode($penalty->project_name),
+                'buttonText' => 'View in Dashboard',
             ];
 
-            Mail::send('emails.penalty-to-admin-notification', $emailData, function ($message) use ($adminEmails, $penalty) {
+            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $penalty) {
                 $message->to($adminEmails)
                     ->subject("New Penalty Submitted by Developer: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
             });
@@ -1158,12 +1291,17 @@ class FinancePenaltyController extends Controller
             'unitId' => $penalty->unit_id,
             'description' => $penalty->description,
             'penaltyInitiatedBy' => $penalty->property?->penalty_initiated_by ?? 'admin',
+            'documentUrl' => $this->stripStorageUrl($penalty->document_url),
+            'documentName' => $penalty->document_name,
             'proofOfPaymentUrl' => $this->stripStorageUrl($penalty->proof_of_payment_url),
             'proofOfPaymentName' => $penalty->proof_of_payment_name,
             'receiptUrl' => $this->stripStorageUrl($penalty->receipt_url),
             'receiptName' => $penalty->receipt_name,
             'receiptSentToBuyer' => $penalty->receipt_sent_to_buyer,
             'receiptSentToBuyerAt' => $penalty->receipt_sent_to_buyer_at?->format('Y-m-d H:i:s'),
+            'sentToBuyer' => $penalty->sent_to_buyer,
+            'sentToBuyerAt' => $penalty->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+            'hasDocumentOrAttachment' => !empty($penalty->document_path) || $penalty->attachments->isNotEmpty(),
             'date' => $penalty->created_at->format('Y-m-d'),
             'notificationSent' => $penalty->notification_sent,
             'viewedByDeveloper' => $penalty->viewed_by_developer,
@@ -1196,5 +1334,25 @@ class FinancePenaltyController extends Controller
         $url = preg_replace('#^https?://[^/]+/storage/#', '', $url);
         
         return $url;
+    }
+
+    /**
+     * Broadcast pending counts to all developers with access to a project
+     */
+    private function broadcastPendingCountsForProject(string $projectName)
+    {
+        try {
+            $devUserIds = FinanceAccess::where('project_name', $projectName)
+                ->where('is_active', true)
+                ->pluck('dev_user_id');
+
+            $devUsers = DevUser::whereIn('id', $devUserIds)->get();
+
+            foreach ($devUsers as $devUser) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($devUser->email);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Failed to broadcast pending counts: ' . $e->getMessage());
+        }
     }
 }

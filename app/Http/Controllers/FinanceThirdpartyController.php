@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\FinanceThirdparty;
 use App\Models\Property;
 use App\Models\DeveloperMagicLink;
+use App\Models\DevUser;
+use App\Models\FinanceAccess;
 use App\Events\FinanceThirdpartyUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -24,10 +26,23 @@ class FinanceThirdpartyController extends Controller
 
         // Check authentication type from middleware
         $authType = $request->attributes->get('auth_type');
+        $user = $request->user();
         
         if ($authType === 'developer') {
-            // Developer is authenticated via magic link - restrict to their project
-            $project = $request->attributes->get('developer_project');
+            // Validate developer has access to the requested project
+            if (!$project) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Project parameter is required',
+                ], 400);
+            }
+            
+            if (!FinanceAccess::hasAccess($user->id, $project)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have access to this project',
+                ], 403);
+            }
         }
 
         $query = FinanceThirdparty::with(['creator:id,full_name,email', 'unit', 'attachments'])
@@ -170,14 +185,8 @@ class FinanceThirdpartyController extends Controller
 
             broadcast(new \App\Events\FinanceThirdpartyUpdated($thirdparty->project_name, 'created', $thirdpartyData));
 
-            // Broadcast pending counts update to developer for this project
-            $developerEmail = \App\Models\DeveloperMagicLink::where('project_name', $request->project_name)
-                ->where('is_active', true)
-                ->value('developer_email');
-            
-            if ($developerEmail) {
-                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($developerEmail);
-            }
+            // Broadcast pending counts update to developers with access to this project
+            $this->broadcastPendingCountsForProject($request->project_name);
 
             return response()->json([
                 'success' => true,
@@ -245,17 +254,16 @@ class FinanceThirdpartyController extends Controller
         }
 
         try {
-            // Get email addresses from request or defaults
+            // Get email addresses and name from request or defaults
             $toEmail = $request->input('to_email');
             $ccEmails = $request->input('cc_emails');
+            $buyerName = $request->input('recipient_name');
 
             // If no email provided, get from unit
             if (!$toEmail && $thirdparty->unit && $thirdparty->unit->primaryFinanceEmail) {
                 $financeEmail = $thirdparty->unit->primaryFinanceEmail;
                 $toEmail = $financeEmail->email;
                 $buyerName = $financeEmail->recipient_name ?? 'Buyer';
-            } else {
-                $buyerName = 'Buyer';
             }
 
             if (!$toEmail) {
@@ -265,13 +273,34 @@ class FinanceThirdpartyController extends Controller
                 ], 400);
             }
 
+            // Save/update finance email if provided in request
+            if ($request->input('to_email') && $thirdparty->unit_id) {
+                \App\Models\FinanceEmail::updateOrCreate(
+                    [
+                        'unit_id' => $thirdparty->unit_id,
+                        'type' => 'buyer',
+                        'is_primary' => true,
+                    ],
+                    [
+                        'email' => $request->input('to_email'),
+                        'recipient_name' => $request->input('recipient_name', 'Buyer'),
+                    ]
+                );
+            }
+
             $emailData = [
-                'thirdpartyNumber' => $thirdparty->thirdparty_number,
-                'thirdpartyName' => $thirdparty->thirdparty_name,
-                'unitNumber' => $thirdparty->unit_number,
-                'projectName' => $thirdparty->project_name,
+                'subject' => "Thirdparty Form: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}",
+                'transactionType' => 'Thirdparty Form',
                 'buyerName' => $buyerName,
-                'documentUrl' => url($thirdparty->form_document_url),
+                'messageBody' => 'Please find attached the thirdparty form for your property. Review the document carefully.',
+                'details' => [
+                    'Thirdparty Number' => $thirdparty->thirdparty_number,
+                    'Form Name' => $thirdparty->thirdparty_name,
+                    'Unit Number' => $thirdparty->unit_number,
+                    'Project' => $thirdparty->project_name,
+                ],
+                'buttonUrl' => url($thirdparty->form_document_url),
+                'buttonText' => 'View Form Document',
             ];
 
             // Prepare CC emails array
@@ -281,7 +310,7 @@ class FinanceThirdpartyController extends Controller
                 $ccEmailsArray = array_filter($ccEmailsArray);
             }
 
-            Mail::send('emails.thirdparty-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
+            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
                 $message->to($toEmail)
                     ->subject("Thirdparty Form: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}");
                 
@@ -465,8 +494,16 @@ class FinanceThirdpartyController extends Controller
             }
 
             $emailData = [
-                'thirdparty' => $thirdparty,
+                'subject' => "Thirdparty Document: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}",
+                'transactionType' => 'Thirdparty Document',
                 'developerName' => $property->developer_name ?? 'Developer',
+                'messageBody' => 'A thirdparty document has been submitted and requires your attention. Please review and process the attached documents.',
+                'details' => [
+                    'Thirdparty Number' => $thirdparty->thirdparty_number,
+                    'Form Name' => $thirdparty->thirdparty_name,
+                    'Unit Number' => $thirdparty->unit_number,
+                    'Project' => $thirdparty->project_name,
+                ],
                 'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
             ];
 
@@ -477,7 +514,7 @@ class FinanceThirdpartyController extends Controller
                 $ccEmailsArray = array_filter($ccEmailsArray);
             }
 
-            Mail::send('emails.thirdparty-to-developer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
+            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
                 $message->to($toEmail)
                     ->subject("Thirdparty Document: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}");
                 
@@ -544,13 +581,9 @@ class FinanceThirdpartyController extends Controller
         try {
             $receiptDoc = $request->file('receipt');
             
-            // Get developer name from middleware attributes
+            // Get uploader name from authenticated user
             $authType = $request->attributes->get('auth_type');
-            $developerName = 'Developer';
-            
-            if ($authType === 'developer') {
-                $developerName = $request->attributes->get('developer_name') ?? 'Developer';
-            }
+            $uploaderName = ($authType === 'developer' && $request->user()) ? $request->user()->name : 'Developer';
 
             $fileName = 'Thirdparty_' . $thirdparty->thirdparty_number . '_Receipt_' . time() . '.' . $receiptDoc->getClientOriginalExtension();
             $storagePath = 'finance/' . $thirdparty->project_name . '/' . $thirdparty->unit_number;
@@ -565,15 +598,12 @@ class FinanceThirdpartyController extends Controller
             $thirdparty->receipt_document_path = $receiptPath;
             $thirdparty->receipt_document_name = $fileName;
             $thirdparty->receipt_uploaded_at = now();
-            $thirdparty->receipt_uploaded_by = $developerName;
+            $thirdparty->receipt_uploaded_by = $uploaderName;
             $thirdparty->save();
 
-            // Broadcast pending counts update to developer
+            // Broadcast pending counts update to developers with access
             if ($authType === 'developer') {
-                $magicLink = $request->attributes->get('developer_magic_link');
-                if ($magicLink && $magicLink->developer_email) {
-                    \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($magicLink->developer_email);
-                }
+                $this->broadcastPendingCountsForProject($thirdparty->project_name);
             }
 
             return response()->json([
@@ -731,17 +761,16 @@ class FinanceThirdpartyController extends Controller
         }
 
         try {
-            // Get email addresses from request or defaults
+            // Get email addresses and name from request or defaults
             $toEmail = $request->input('to_email');
             $ccEmails = $request->input('cc_emails');
+            $buyerName = $request->input('recipient_name');
 
             // If no email provided, get from unit
             if (!$toEmail && $thirdparty->unit && $thirdparty->unit->primaryFinanceEmail) {
                 $financeEmail = $thirdparty->unit->primaryFinanceEmail;
                 $toEmail = $financeEmail->email;
                 $buyerName = $financeEmail->recipient_name ?? 'Buyer';
-            } else {
-                $buyerName = 'Buyer';
             }
 
             if (!$toEmail) {
@@ -751,13 +780,34 @@ class FinanceThirdpartyController extends Controller
                 ], 400);
             }
 
+            // Save/update finance email if provided in request
+            if ($request->input('to_email') && $thirdparty->unit_id) {
+                \App\Models\FinanceEmail::updateOrCreate(
+                    [
+                        'unit_id' => $thirdparty->unit_id,
+                        'type' => 'buyer',
+                        'is_primary' => true,
+                    ],
+                    [
+                        'email' => $request->input('to_email'),
+                        'recipient_name' => $request->input('recipient_name', 'Buyer'),
+                    ]
+                );
+            }
+
             $emailData = [
-                'thirdpartyNumber' => $thirdparty->thirdparty_number,
-                'thirdpartyName' => $thirdparty->thirdparty_name,
-                'unitNumber' => $thirdparty->unit_number,
-                'projectName' => $thirdparty->project_name,
+                'subject' => "Thirdparty Receipt: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}",
+                'transactionType' => 'Thirdparty Receipt',
                 'buyerName' => $buyerName,
-                'receiptUrl' => url($thirdparty->receipt_document_url),
+                'messageBody' => 'Thank you for your payment. Please find attached your receipt for the thirdparty form.',
+                'details' => [
+                    'Thirdparty Number' => $thirdparty->thirdparty_number,
+                    'Form Name' => $thirdparty->thirdparty_name,
+                    'Unit Number' => $thirdparty->unit_number,
+                    'Project' => $thirdparty->project_name,
+                ],
+                'buttonUrl' => url($thirdparty->receipt_document_url),
+                'buttonText' => 'View Receipt',
             ];
 
             // Prepare CC emails array
@@ -767,7 +817,7 @@ class FinanceThirdpartyController extends Controller
                 $ccEmailsArray = array_filter($ccEmailsArray);
             }
 
-            Mail::send('emails.thirdparty-receipt-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
+            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
                 $message->to($toEmail)
                     ->subject("Thirdparty Receipt: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}");
                 
@@ -795,6 +845,26 @@ class FinanceThirdpartyController extends Controller
                 'success' => false,
                 'message' => 'Failed to send receipt to buyer: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    /**
+     * Broadcast pending counts to all developers with access to a project
+     */
+    private function broadcastPendingCountsForProject(string $projectName)
+    {
+        try {
+            $devUserIds = FinanceAccess::where('project_name', $projectName)
+                ->where('is_active', true)
+                ->pluck('dev_user_id');
+
+            $devUsers = DevUser::whereIn('id', $devUserIds)->get();
+
+            foreach ($devUsers as $devUser) {
+                \App\Http\Controllers\DeveloperPortalController::broadcastPendingCounts($devUser->email);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Failed to broadcast pending counts: ' . $e->getMessage());
         }
     }
 }
