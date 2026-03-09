@@ -439,9 +439,41 @@ class FinancePOPController extends Controller
             
             $property->save();
 
+            // Auto-grant finance access if developer emails already have accounts
+            $autoGrantedEmails = [];
+            
+            // Check and grant for developer_email
+            if ($property->developer_email) {
+                $devUser = DevUser::where('email', $property->developer_email)->first();
+                if ($devUser) {
+                    FinanceAccess::grantAccess($devUser->id, $property->project_name);
+                    $autoGrantedEmails[] = $property->developer_email;
+                }
+            }
+            
+            // Check and grant for cc_emails
+            if ($property->cc_emails) {
+                $ccEmailsArray = array_map('trim', explode(',', $property->cc_emails));
+                foreach ($ccEmailsArray as $ccEmail) {
+                    if (!empty($ccEmail)) {
+                        $devUser = DevUser::where('email', $ccEmail)->first();
+                        if ($devUser) {
+                            FinanceAccess::grantAccess($devUser->id, $property->project_name);
+                            $autoGrantedEmails[] = $ccEmail;
+                        }
+                    }
+                }
+            }
+
+            $message = 'Settings updated successfully';
+            if (count($autoGrantedEmails) > 0) {
+                $message .= '. Finance access automatically granted to: ' . implode(', ', $autoGrantedEmails);
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Settings updated successfully',
+                'message' => $message,
+                'auto_granted_count' => count($autoGrantedEmails),
             ]);
         } catch (\Exception $e) {
             return response()->json([
