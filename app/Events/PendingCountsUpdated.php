@@ -23,7 +23,7 @@ class PendingCountsUpdated implements ShouldBroadcastNow
         $this->developerEmail = $developerEmail;
         $this->counts = $counts;
     }
-
+/* */
     /**
      * Get the channels the event should broadcast on.
      *
