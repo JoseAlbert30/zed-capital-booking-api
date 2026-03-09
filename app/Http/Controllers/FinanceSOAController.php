@@ -454,7 +454,7 @@ class FinanceSOAController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $soa) {
+            Mail::mailer('finance')->send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $soa) {
                 $message->to($property->developer_email)
                     ->subject("SOA Request: Unit {$soa->unit_number} - {$soa->project_name}");
                 
@@ -480,11 +480,7 @@ class FinanceSOAController extends Controller
     {
         try {
             $adminEmails = [
-                'operations@zedcapital.ae',
-                'docs@zedcapital.ae',
-                'admin@zedcapital.ae',
-                'clientsupport@zedcapital.ae',
-                'wbd@zedcapital.ae',
+                'wbd@zedcapital.ae'
             ];
 
             $emailData = [
@@ -502,7 +498,7 @@ class FinanceSOAController extends Controller
                 'buttonText' => 'View SOA Document',
             ];
 
-            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $soa) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $soa) {
                 $message->to($adminEmails)
                     ->subject("SOA Document Uploaded: Unit {$soa->unit_number} - {$soa->project_name}");
             });
@@ -583,7 +579,7 @@ class FinanceSOAController extends Controller
             ];
 
             // Send email
-            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
                 $message->to($buyerEmail)
                     ->subject("Statement of Account - Unit {$soa->unit_number}");
             });
@@ -691,7 +687,7 @@ class FinanceSOAController extends Controller
             ];
 
             // Send email with SOA document attachment
-            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
                 $message->to($buyerEmail)
                     ->subject("Statement of Account - Unit {$soa->unit_number}");
                 

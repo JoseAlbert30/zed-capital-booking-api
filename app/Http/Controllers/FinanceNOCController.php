@@ -457,7 +457,7 @@ class FinanceNOCController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $noc) {
+            Mail::mailer('finance')->send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $noc) {
                 $message->to($property->developer_email)
                     ->subject("NOC Request: {$noc->noc_name} - Unit {$noc->unit_number}");
                 
@@ -483,11 +483,7 @@ class FinanceNOCController extends Controller
     {
         try {
             $adminEmails = [
-                // 'operations@zedcapital.ae',
-                // 'docs@zedcapital.ae',
-                // 'admin@zedcapital.ae',
-                // 'clientsupport@zedcapital.ae',
-                'wbd@zedcapital.ae',
+                'wbd@zedcapital.ae'
             ];
 
             $emailData = [
@@ -506,7 +502,7 @@ class FinanceNOCController extends Controller
                 'buttonText' => 'View NOC Document',
             ];
 
-            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $noc) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $noc) {
                 $message->to($adminEmails)
                     ->subject("NOC Document Uploaded: {$noc->noc_name} - Unit {$noc->unit_number}");
             });
@@ -588,7 +584,7 @@ class FinanceNOCController extends Controller
             ];
 
             // Send email with NOC document attachment
-            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $noc) {
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $noc) {
                 $message->to($buyerEmail)
                     ->subject("NOC Document - {$noc->noc_name}");
                 

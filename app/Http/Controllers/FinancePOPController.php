@@ -554,10 +554,6 @@ class FinancePOPController extends Controller
     {
         try {
             $adminEmails = [
-                'operations@zedcapital.ae',
-                'docs@zedcapital.ae',
-                'admin@zedcapital.ae',
-                'clientsupport@zedcapital.ae',
                 'wbd@zedcapital.ae'
             ];
 
@@ -576,7 +572,7 @@ class FinancePOPController extends Controller
                 'buttonText' => 'View Receipt',
             ];
 
-            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $pop) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $pop) {
                 $message->to($adminEmails)
                     ->subject("Receipt Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}");
             });
@@ -730,7 +726,7 @@ class FinancePOPController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $pop) {
+            Mail::mailer('finance')->send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $pop) {
                 $message->to($property->developer_email)
                     ->subject("SOA Request for POP {$pop->pop_number} - Unit {$pop->unit_number}");
                 
@@ -847,11 +843,7 @@ class FinancePOPController extends Controller
     {
         try {
             $adminEmails = [
-                'operations@zedcapital.ae',
-                'docs@zedcapital.ae',
-                'admin@zedcapital.ae',
-                'clientsupport@zedcapital.ae',
-                'wbd@zedcapital.ae',
+                'wbd@zedcapital.ae'
             ];
 
             $emailData = [
@@ -869,7 +861,7 @@ class FinancePOPController extends Controller
                 'buttonText' => 'View SOA Documents',
             ];
 
-            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $pop) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $pop) {
                 $message->to($adminEmails)
                     ->subject("SOA Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}");
             });
@@ -1000,7 +992,7 @@ class FinancePOPController extends Controller
             ];
 
             // Send email
-            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $pop) {
+            Mail::mailer('finance')->send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $pop) {
                 $message->to($property->developer_email)
                     ->subject('New Payment - Proof of Payment Received - ' . $pop->pop_number);
                 
@@ -1091,7 +1083,7 @@ class FinancePOPController extends Controller
             ];
 
             // Send email with receipt attachment
-            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop) {
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop) {
                 $message->to($buyerEmail)
                     ->subject("Payment Receipt - Unit {$pop->unit_number}");
                 

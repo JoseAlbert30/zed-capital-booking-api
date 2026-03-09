@@ -97,6 +97,21 @@ return [
             'retry_after' => 60,
         ],
 
+        'finance' => [
+            'transport' => 'smtp',
+            'host' => env('FINANCE_MAIL_HOST', 'smtp.office365.com'),
+            'port' => env('FINANCE_MAIL_PORT', 587),
+            'encryption' => env('FINANCE_MAIL_ENCRYPTION', 'tls'),
+            'username' => env('FINANCE_MAIL_USERNAME'),
+            'password' => env('FINANCE_MAIL_PASSWORD'),
+            'timeout' => null,
+            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+            'from' => [
+                'address' => env('FINANCE_MAIL_FROM_ADDRESS', 'accounts.asst@zedcapital.ae'),
+                'name' => env('FINANCE_MAIL_FROM_NAME', 'ZedCapital Finance'),
+            ],
+        ],
+
     ],
 
     /*

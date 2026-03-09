@@ -39,7 +39,7 @@
     <div class="email-container">
         <!-- Logo Header -->
         <div class="logo-header">
-            <img src="{{ $logoBase64 }}"
+            <img src="https://i.ibb.co/d0QP4tBP/Black-Logo-Zed-Cap.png"
                 alt="Zed Capital"
                 style="max-width: 200px; height: auto;">
         </div>

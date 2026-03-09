@@ -532,7 +532,7 @@ class FinancePenaltyController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
+            Mail::mailer('finance')->send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
                 $message->to($property->developer_email)
                     ->subject("Penalty Notice: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
                 
@@ -558,11 +558,7 @@ class FinancePenaltyController extends Controller
     {
         try {
             $adminEmails = [
-                'operations@zedcapital.ae',
-                'docs@zedcapital.ae',
-                'admin@zedcapital.ae',
-                'clientsupport@zedcapital.ae',
-                'wbd@zedcapital.ae',
+                'wbd@zedcapital.ae'
             ];
 
             $emailData = [
@@ -581,7 +577,7 @@ class FinancePenaltyController extends Controller
                 'buttonText' => 'View Document',
             ];
 
-            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $penalty) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $penalty) {
                 $message->to($adminEmails)
                     ->subject("Penalty Document Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
             });
@@ -640,7 +636,7 @@ class FinancePenaltyController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
+            Mail::mailer('finance')->send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
                 $message->to($property->developer_email)
                     ->subject("Penalty Document Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
                 
@@ -768,7 +764,7 @@ class FinancePenaltyController extends Controller
                 $ccEmails = array_map('trim', explode(',', $property->cc_emails));
             }
 
-            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
+            Mail::mailer('finance')->send('emails.finance-to-developer', $emailData, function ($message) use ($property, $ccEmails, $penalty) {
                 $message->to($property->developer_email)
                     ->subject("Proof of Payment Uploaded - Action Required: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
                 
@@ -884,9 +880,9 @@ class FinancePenaltyController extends Controller
             ];
 
             // Send to admin email or configured emails
-            $adminEmail = env('ADMIN_EMAIL', 'admin@zedcapital.com');
+            $adminEmail = 'wbd@zedcapital.ae';
 
-            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($penalty, $adminEmail) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($penalty, $adminEmail) {
                 $message->to($adminEmail)
                     ->subject("Penalty Receipt Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
             });
@@ -966,7 +962,7 @@ class FinancePenaltyController extends Controller
                 'buttonText' => 'View Receipt',
             ];
 
-            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
                 $message->to($buyerEmail)
                     ->subject("Penalty Payment Receipt: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
                 
@@ -1089,7 +1085,7 @@ class FinancePenaltyController extends Controller
             }
 
             // Send email with penalty document attachment
-            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
                 $message->to($buyerEmail)
                     ->subject("Penalty Notice - {$penalty->penalty_name}");
                 
@@ -1234,11 +1230,7 @@ class FinancePenaltyController extends Controller
     {
         try {
             $adminEmails = [
-                'operations@zedcapital.ae',
-                'docs@zedcapital.ae',
-                'admin@zedcapital.ae',
-                'clientsupport@zedcapital.ae',
-                'wbd@zedcapital.ae',
+                'wbd@zedcapital.ae'
             ];
 
             $developerName = $property->developer_name ?? 'Developer';
@@ -1260,7 +1252,7 @@ class FinancePenaltyController extends Controller
                 'buttonText' => 'View in Dashboard',
             ];
 
-            Mail::send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $penalty) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $penalty) {
                 $message->to($adminEmails)
                     ->subject("New Penalty Submitted by Developer: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
             });

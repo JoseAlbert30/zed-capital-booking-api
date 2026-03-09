@@ -158,17 +158,16 @@
 
 <body>
     @php
-        $logoPath = public_path('storage/letterheads/zed.png');
-        $logoBase64 = '';
-        if (file_exists($logoPath)) {
-            $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
-        }
+    $logoPath = public_path('storage/letterheads/zed.png');
+    $logoBase64 = '';
+    if (file_exists($logoPath)) {
+    $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+    }
     @endphp
     <div class="email-container">
         <!-- Logo Header -->
         <div class="logo-header">
-            <img src="{{ $logoBase64 }}"
-                alt="Zed Capital"
+            <img src="https://i.ibb.co/d0QP4tBP/Black-Logo-Zed-Cap.png" alt="Zed Capital"
                 style="max-width: 200px; height: auto;">
         </div>
 
@@ -183,12 +182,12 @@
             <div class="info-box">
                 <h3>{{ $transactionType }} Details</h3>
                 @foreach($details as $label => $value)
-                    @if(!empty($value))
-                    <div class="info-row">
-                        <span class="info-label">{{ $label }}:</span>
-                        <span class="info-value">{{ $value }}</span>
-                    </div>
-                    @endif
+                @if(!empty($value))
+                <div class="info-row">
+                    <span class="info-label">{{ $label }}:</span>
+                    <span class="info-value">{{ $value }}</span>
+                </div>
+                @endif
                 @endforeach
             </div>
 

@@ -310,7 +310,7 @@ class FinanceThirdpartyController extends Controller
                 $ccEmailsArray = array_filter($ccEmailsArray);
             }
 
-            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
                 $message->to($toEmail)
                     ->subject("Thirdparty Form: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}");
                 
@@ -514,7 +514,7 @@ class FinanceThirdpartyController extends Controller
                 $ccEmailsArray = array_filter($ccEmailsArray);
             }
 
-            Mail::send('emails.finance-to-developer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
+            Mail::mailer('finance')->send('emails.finance-to-developer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
                 $message->to($toEmail)
                     ->subject("Thirdparty Document: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}");
                 
@@ -817,7 +817,7 @@ class FinanceThirdpartyController extends Controller
                 $ccEmailsArray = array_filter($ccEmailsArray);
             }
 
-            Mail::send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
                 $message->to($toEmail)
                     ->subject("Thirdparty Receipt: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}");
                 
