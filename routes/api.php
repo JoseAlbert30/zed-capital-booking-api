@@ -168,6 +168,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->group(function () {
         Route::get('/remarks', [UnitController::class, 'getAllRemarks']);
         Route::get('/remarks/export', [UnitController::class, 'exportRemarks']);
+        
+        // Developer Management Routes
+        Route::prefix('developers')->group(function () {
+            Route::get('/', [App\Http\Controllers\AdminDevUserController::class, 'index']);
+            Route::post('/', [App\Http\Controllers\AdminDevUserController::class, 'store']);
+            Route::put('/{id}', [App\Http\Controllers\AdminDevUserController::class, 'update']);
+            Route::delete('/{id}', [App\Http\Controllers\AdminDevUserController::class, 'destroy']);
+            Route::post('/{id}/reset-password', [App\Http\Controllers\AdminDevUserController::class, 'resetPassword']);
+            Route::post('/{id}/grant-access', [App\Http\Controllers\AdminDevUserController::class, 'grantAccess']);
+            Route::delete('/{id}/access/{accessId}', [App\Http\Controllers\AdminDevUserController::class, 'revokeAccess']);
+        });
+        
+        Route::get('/available-projects', [App\Http\Controllers\AdminDevUserController::class, 'getAvailableProjects']);
     });
 
     Route::prefix('sales-offers')->group(function () {
@@ -297,6 +310,10 @@ Route::prefix('developer')->group(function () {
     Route::get('/my-projects', [DeveloperPortalController::class, 'getMyProjects']);
     Route::get('/pending-counts', [DeveloperPortalController::class, 'getPendingCounts']);
     Route::get('/projects/{projectName}/access-list', [DeveloperPortalController::class, 'getProjectAccessList']);
+    
+    // New DevUser authentication routes
+    Route::post('/auth/login', [DeveloperPortalController::class, 'devUserLogin']);
+    Route::middleware('auth:sanctum')->post('/auth/change-password', [DeveloperPortalController::class, 'changePassword']);
 });
 
 Route::get('/health', function () {

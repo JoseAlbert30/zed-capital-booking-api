@@ -667,4 +667,92 @@ class DeveloperPortalController extends Controller
             'projects' => $projectCounts,
         ]));
     }
+
+    /**
+     * DevUser authentication (new system)
+     */
+    public function devUserLogin(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $devUser = \App\Models\DevUser::where('email', $request->email)->first();
+
+        if (!$devUser || !\Illuminate\Support\Facades\Hash::check($request->password, $devUser->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials',
+            ], 401);
+        }
+
+        // Update last login
+        $devUser->last_login = now();
+        $devUser->save();
+
+        // Create token
+        $token = $devUser->createToken('developer-access')->plainTextToken;
+
+        // Get accessible projects
+        $projects = $devUser->getAccessibleProjects();
+
+        return response()->json([
+            'success' => true,
+            'token' => $token,
+            'developer' => [
+                'id' => $devUser->id,
+                'name' => $devUser->name,
+                'email' => $devUser->email,
+                'must_reset_password' => (bool) ($devUser->must_reset_password ?? false),
+            ],
+            'projects' => $projects,
+        ]);
+    }
+
+    /**
+     * Change password for developer
+     */
+    public function changePassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $devUser = $request->user(); // From auth:sanctum middleware
+
+        if (!\Illuminate\Support\Facades\Hash::check($request->current_password, $devUser->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Current password is incorrect',
+            ], 401);
+        }
+
+        $devUser->password = \Illuminate\Support\Facades\Hash::make($request->new_password);
+        $devUser->must_reset_password = false;
+        $devUser->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password changed successfully',
+        ]);
+    }
 }
+

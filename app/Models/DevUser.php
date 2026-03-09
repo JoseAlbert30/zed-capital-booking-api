@@ -16,6 +16,8 @@ class DevUser extends Authenticatable
         'name',
         'email',
         'password',
+        'must_reset_password',
+        'last_login',
     ];
 
     protected $hidden = [
@@ -28,6 +30,8 @@ class DevUser extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_reset_password' => 'boolean',
+            'last_login' => 'datetime',
         ];
     }
 
