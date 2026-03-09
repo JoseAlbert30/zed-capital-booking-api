@@ -3523,13 +3523,17 @@ class UnitController extends Controller
             }
 
             // Create CSV headers
-            $csv = "Unit Number,Owner Names,Payment Status,Clearance Status,100% SOA Status,DEWA Status,AC Status,Service Charge Acknowledgement Status,Developer NOC Status,Handover Booking Status,Handover Booking Date and Time,Handover Status\n";
+            $csv = "Unit Number,Owner Names,Email,Payment Status,Clearance Status,100% SOA Status,DEWA Status,AC Status,Service Charge Acknowledgement Status,Developer NOC Status,Handover Booking Status,Handover Booking Date and Time,Handover Status\n";
 
             // Generate CSV rows
             foreach ($units as $unit) {
                 // Get owner names
                 $owners = $unit->users->pluck('full_name')->toArray();
                 $ownerNames = count($owners) > 0 ? implode(' & ', $owners) : 'No Owner';
+
+                // Get owner emails
+                $emails = $unit->users->pluck('email')->toArray();
+                $ownerEmails = count($emails) > 0 ? implode(' & ', $emails) : 'N/A';
 
                 // Get attachment statuses
                 $attachments = $unit->attachments;
@@ -3568,9 +3572,10 @@ class UnitController extends Controller
 
                 // Add row to CSV
                 $csv .= sprintf(
-                    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
                     $unit->unit ?? 'N/A',
                     str_replace('"', '""', $ownerNames),
+                    str_replace('"', '""', $ownerEmails),
                     $paymentStatus,
                     $hasClearance,
                     $hasSOA,
