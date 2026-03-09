@@ -12,6 +12,7 @@ use App\Http\Controllers\FinancePenaltyController;
 use App\Http\Controllers\FinanceNOCController;
 use App\Http\Controllers\FinanceSOAController;
 use App\Http\Controllers\FinanceThirdpartyController;
+use App\Http\Controllers\FinanceEmailController;
 use App\Http\Controllers\DeveloperPortalController;
 use App\Http\Controllers\DevAuthController;
 use Illuminate\Http\Request;
@@ -269,6 +270,13 @@ Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
     Route::post('/thirdparties/{id}/send-to-developer', [FinanceThirdpartyController::class, 'sendToDeveloper']);
     Route::post('/thirdparties/{id}/attachments', [FinanceThirdpartyController::class, 'uploadAttachment']);
     Route::delete('/thirdparties/{id}/attachments/{attachmentId}', [FinanceThirdpartyController::class, 'deleteAttachment']);
+    
+    // Finance Email routes (admin only)
+    Route::post('/emails/upload-csv', [FinanceEmailController::class, 'uploadCsv']);
+    Route::get('/emails/by-project', [FinanceEmailController::class, 'getByProject']);
+    Route::delete('/emails/by-project', [FinanceEmailController::class, 'deleteByProject']);
+    Route::delete('/emails/{id}', [FinanceEmailController::class, 'delete']);
+    Route::get('/emails/template', [FinanceEmailController::class, 'downloadTemplate']);
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {
