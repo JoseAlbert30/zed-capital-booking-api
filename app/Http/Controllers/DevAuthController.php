@@ -143,21 +143,42 @@ class DevAuthController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        // Grant access to project
-        FinanceAccess::grantAccess($devUser->id, $magicLink->project_name);
+        // Find ALL projects where this email is authorized (developer_email or cc_emails)
+        $allEmailProjects = Property::where(function ($query) use ($request) {
+            $query->where('developer_email', $request->email)
+                  ->orWhere('cc_emails', 'like', '%' . $request->email . '%');
+        })->get();
+
+        $grantedProjects = [];
+        foreach ($allEmailProjects as $project) {
+            // Verify email is in the allowed list (developer_email or cc_emails)
+            $projectAllowedEmails = array_merge(
+                [$project->developer_email],
+                $project->cc_emails ? array_map('trim', explode(',', $project->cc_emails)) : []
+            );
+
+            if (in_array($request->email, $projectAllowedEmails)) {
+                FinanceAccess::grantAccess($devUser->id, $project->project_name);
+                $grantedProjects[] = $project->project_name;
+            }
+        }
 
         // Generate token
         $token = $devUser->createToken('developer-access')->plainTextToken;
 
         return response()->json([
             'success' => true,
-            'message' => 'Account created and access granted',
+            'message' => count($grantedProjects) > 1 
+                ? 'Account created and access granted to ' . count($grantedProjects) . ' projects' 
+                : 'Account created and access granted',
             'token' => $token,
             'user' => [
                 'id' => $devUser->id,
                 'name' => $devUser->name,
                 'email' => $devUser->email,
             ],
+            'granted_projects' => $grantedProjects,
+            'projects_count' => count($grantedProjects),
         ], 201);
     }
 
