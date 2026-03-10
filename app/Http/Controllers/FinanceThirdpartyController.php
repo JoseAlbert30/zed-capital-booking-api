@@ -311,12 +311,11 @@ class FinanceThirdpartyController extends Controller
             }
 
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
+                $allCc = array_values(array_unique(array_merge($staticCc, $ccEmailsArray)));
                 $message->to($toEmail)
-                    ->subject("Thirdparty Form: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}");
-                
-                if (!empty($ccEmailsArray)) {
-                    $message->cc($ccEmailsArray);
-                }
+                    ->subject("Thirdparty Form: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}")
+                    ->cc($allCc);
 
                 // Attach form document if available
                 if ($thirdparty->form_document_path && \Storage::disk('public')->exists($thirdparty->form_document_path)) {
@@ -818,12 +817,11 @@ class FinanceThirdpartyController extends Controller
             }
 
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
+                $allCc = array_values(array_unique(array_merge($staticCc, $ccEmailsArray)));
                 $message->to($toEmail)
-                    ->subject("Thirdparty Receipt: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}");
-                
-                if (!empty($ccEmailsArray)) {
-                    $message->cc($ccEmailsArray);
-                }
+                    ->subject("Thirdparty Receipt: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}")
+                    ->cc($allCc);
 
                 // Attach receipt
                 if ($thirdparty->receipt_document_path && \Storage::disk('public')->exists($thirdparty->receipt_document_path)) {

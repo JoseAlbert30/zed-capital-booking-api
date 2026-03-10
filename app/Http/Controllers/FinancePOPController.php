@@ -395,6 +395,8 @@ class FinancePOPController extends Controller
                 'developer_email' => $property->developer_email,
                 'developer_name' => $property->developer_name,
                 'cc_emails' => $property->cc_emails,
+                'admin_emails' => $property->admin_emails,
+                'admin_cc_emails' => $property->admin_cc_emails,
                 'penalty_initiated_by' => $property->penalty_initiated_by ?? 'admin',
                 'code_prefix' => $property->code_prefix,
             ]);
@@ -415,6 +417,8 @@ class FinancePOPController extends Controller
             'developer_email' => 'nullable|email',
             'developer_name' => 'nullable|string',
             'cc_emails' => 'nullable|string',
+            'admin_emails' => 'nullable|string',
+            'admin_cc_emails' => 'nullable|string',
             'penalty_initiated_by' => 'nullable|in:admin,developer',
             'code_prefix' => 'nullable|string|min:4|max:10|regex:/^[A-Z0-9]+$/',
         ]);
@@ -440,6 +444,8 @@ class FinancePOPController extends Controller
             $property->developer_email = $request->input('developer_email');
             $property->developer_name = $request->input('developer_name');
             $property->cc_emails = $request->input('cc_emails');
+            $property->admin_emails = $request->input('admin_emails');
+            $property->admin_cc_emails = $request->input('admin_cc_emails');
             
             if ($request->has('penalty_initiated_by')) {
                 $property->penalty_initiated_by = $request->input('penalty_initiated_by');
@@ -1111,8 +1117,10 @@ class FinancePOPController extends Controller
 
             // Send email with receipt attachment
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop) {
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
                 $message->to($buyerEmail)
-                    ->subject("Payment Receipt - Unit {$pop->unit_number}");
+                    ->subject("Payment Receipt - Unit {$pop->unit_number}")
+                    ->cc($staticCc);
                 
                 // Attach receipt file if it exists
                 if ($pop->receipt_path && \Storage::disk('public')->exists($pop->receipt_path)) {

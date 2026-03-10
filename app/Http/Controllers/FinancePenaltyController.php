@@ -963,8 +963,10 @@ class FinancePenaltyController extends Controller
             ];
 
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
                 $message->to($buyerEmail)
-                    ->subject("Penalty Payment Receipt: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
+                    ->subject("Penalty Payment Receipt: {$penalty->penalty_name} - Unit {$penalty->unit_number}")
+                    ->cc($staticCc);
                 
                 // Attach receipt file if it exists
                 if ($penalty->receipt_path && \Storage::disk('public')->exists($penalty->receipt_path)) {
@@ -1086,8 +1088,10 @@ class FinancePenaltyController extends Controller
 
             // Send email with penalty document attachment
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $penalty) {
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
                 $message->to($buyerEmail)
-                    ->subject("Penalty Notice - {$penalty->penalty_name}");
+                    ->subject("Penalty Notice - {$penalty->penalty_name}")
+                    ->cc($staticCc);
                 
                 // Attach penalty document/invoice if it exists
                 if ($penalty->document_path && \Storage::disk('public')->exists($penalty->document_path)) {

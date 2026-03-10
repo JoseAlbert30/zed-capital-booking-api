@@ -18,6 +18,8 @@ class Property extends Model
         'developer_email',
         'developer_name',
         'cc_emails',
+        'admin_emails',
+        'admin_cc_emails',
         'penalty_initiated_by',
         'handover_checklist_template',
         'declaration_template',

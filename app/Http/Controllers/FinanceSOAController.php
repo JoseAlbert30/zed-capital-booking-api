@@ -620,8 +620,10 @@ class FinanceSOAController extends Controller
 
             // Send email
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
                 $message->to($buyerEmail)
-                    ->subject("Statement of Account - Unit {$soa->unit_number}");
+                    ->subject("Statement of Account - Unit {$soa->unit_number}")
+                    ->cc($staticCc);
             });
 
             // Update SOA
@@ -739,8 +741,10 @@ class FinanceSOAController extends Controller
 
             // Send email with SOA document attachment
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
                 $message->to($buyerEmail)
-                    ->subject("Statement of Account - Unit {$soa->unit_number}");
+                    ->subject("Statement of Account - Unit {$soa->unit_number}")
+                    ->cc($staticCc);
                 
                 // Attach SOA document if it exists
                 if ($soa->document_path && \Storage::disk('public')->exists($soa->document_path)) {

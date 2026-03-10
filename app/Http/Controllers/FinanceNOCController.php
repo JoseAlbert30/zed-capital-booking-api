@@ -522,9 +522,19 @@ class FinanceNOCController extends Controller
     private function sendNOCDocumentUploadedNotificationToAdmin(FinanceNOC $noc, string $developerName)
     {
         try {
-            $adminEmails = [
-                'wbd@zedcapital.ae'
-            ];
+            // Use per-project admin emails; fall back to default if not configured
+            $property = Property::where('project_name', $noc->project_name)->first();
+            $adminEmails = ['wbd@zedcapital.ae'];
+            $adminCcEmails = [];
+            if ($property && $property->admin_emails) {
+                $parsed = array_filter(array_map('trim', explode(',', $property->admin_emails)));
+                if (!empty($parsed)) {
+                    $adminEmails = $parsed;
+                }
+            }
+            if ($property && $property->admin_cc_emails) {
+                $adminCcEmails = array_filter(array_map('trim', explode(',', $property->admin_cc_emails)));
+            }
 
             $emailData = [
                 'subject' => "NOC Document Uploaded: {$noc->noc_name} - Unit {$noc->unit_number}",
@@ -542,9 +552,12 @@ class FinanceNOCController extends Controller
                 'buttonText' => 'View NOC Document',
             ];
 
-            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $noc) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $noc) {
                 $message->to($adminEmails)
                     ->subject("NOC Document Uploaded: {$noc->noc_name} - Unit {$noc->unit_number}");
+                if (!empty($adminCcEmails)) {
+                    $message->cc($adminCcEmails);
+                }
             });
 
         } catch (\Exception $e) {
@@ -625,8 +638,10 @@ class FinanceNOCController extends Controller
 
             // Send email with NOC document attachment
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $noc) {
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
                 $message->to($buyerEmail)
-                    ->subject("NOC Document - {$noc->noc_name}");
+                    ->subject("NOC Document - {$noc->noc_name}")
+                    ->cc($staticCc);
                 
                 // Attach NOC document if it exists
                 if ($noc->document_path && \Storage::disk('public')->exists($noc->document_path)) {
