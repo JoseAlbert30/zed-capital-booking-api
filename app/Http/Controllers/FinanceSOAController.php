@@ -445,7 +445,7 @@ class FinanceSOAController extends Controller
                     'Description' => $soa->description,
                     'Project' => $soa->project_name,
                 ],
-                'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
+                'magicLink' => config('app.frontend_url') . '/developer/portal?token=' . $magicLink->token,
             ];
 
             // Prepare CC emails

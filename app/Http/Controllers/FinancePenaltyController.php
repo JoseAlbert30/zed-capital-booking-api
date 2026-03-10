@@ -523,7 +523,7 @@ class FinancePenaltyController extends Controller
                     'Description' => $penalty->description,
                     'Project' => $penalty->project_name,
                 ],
-                'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
+                'magicLink' => config('app.frontend_url') . '/developer/portal?token=' . $magicLink->token,
             ];
 
             // Prepare CC emails
@@ -625,7 +625,7 @@ class FinancePenaltyController extends Controller
                     'Unit Number' => $penalty->unit_number,
                     'Project' => $penalty->project_name,
                 ],
-                'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
+                'magicLink' => config('app.frontend_url') . '/developer/portal?token=' . $magicLink->token,
                 'buttonUrl' => url($penalty->document_url),
                 'buttonText' => 'View Document',
             ];
@@ -749,7 +749,7 @@ class FinancePenaltyController extends Controller
                     'Unit Number' => $penalty->unit_number,
                     'Project' => $penalty->project_name,
                 ],
-                'magicLink' => env('FRONTEND_URL', 'http://localhost:3000') . '/developer/login?token=' . $magicLink->token,
+                'magicLink' => config('app.frontend_url') . '/developer/portal?token=' . $magicLink->token,
                 'buttonUrl' => url($penalty->proof_of_payment_url),
                 'buttonText' => 'View Proof of Payment',
                 'additionalInfo' => [
@@ -1248,7 +1248,7 @@ class FinancePenaltyController extends Controller
                     'Project' => $penalty->project_name,
                     'Developer' => $property->developer_name ?? 'Developer',
                 ],
-                'buttonUrl' => env('FRONTEND_URL', 'http://localhost:3000') . '/admin/finance?project=' . urlencode($penalty->project_name),
+                'buttonUrl' => config('app.frontend_url') . '/admin/finance?project=' . urlencode($penalty->project_name),
                 'buttonText' => 'View in Dashboard',
             ];
 
