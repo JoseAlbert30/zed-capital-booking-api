@@ -177,6 +177,7 @@ class FinanceNOCController extends Controller
                 'viewedAt' => $noc->viewed_at?->format('Y-m-d H:i:s'),
                 'sentToBuyer' => (bool) $noc->sent_to_buyer,
                 'sentToBuyerAt' => $noc->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'createdBy' => $noc->created_by,
                 'attachments' => $noc->attachments->map(function ($att) {
                     return [
                         'id' => $att->id,

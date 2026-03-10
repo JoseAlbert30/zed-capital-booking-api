@@ -44,7 +44,7 @@ class FinancePOPController extends Controller
             }
         }
 
-        $query = FinancePOP::with(['creator:id,full_name,email', 'unit'])
+        $query = FinancePOP::with(['creator:id,full_name,email', 'unit', 'attachments'])
             ->orderBy('created_at', 'desc');
 
         if ($project) {
@@ -73,6 +73,16 @@ class FinancePOPController extends Controller
                     'receiptSentToBuyer' => $pop->receipt_sent_to_buyer,
                     'receiptSentToBuyerAt' => $pop->receipt_sent_to_buyer_at?->format('Y-m-d H:i:s'),
                     'notes' => $pop->notes,
+                    'description' => $pop->description,
+                    'attachments' => $pop->attachments ? $pop->attachments->map(function ($att) {
+                        return [
+                            'id' => $att->id,
+                            'fileName' => $att->file_name,
+                            'fileUrl' => $att->file_url,
+                            'fileSize' => $att->file_size,
+                            'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                        ];
+                    }) : [],
                     'timeline' => $pop->timeline,
                     'createdBy' => $pop->creator ? [
                         'name' => $pop->creator->full_name,
@@ -99,6 +109,7 @@ class FinancePOPController extends Controller
             'buyer_email' => 'nullable|email',
             'attachment' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240', // 10MB max
             'notes' => 'nullable|string',
+            'description' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -162,6 +173,7 @@ class FinancePOPController extends Controller
                 'attachment_path' => $path,
                 'attachment_name' => $fileName,
                 'notes' => $request->notes,
+                'description' => $request->description,
                 'created_by' => auth()->id(),
             ]);
 
@@ -170,7 +182,7 @@ class FinancePOPController extends Controller
                 $this->sendToDeveloper($pop);
             }
 
-            $pop->load('creator:id,full_name,email', 'unit');
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $popData = $this->formatPOPResponse($pop);
 
@@ -257,7 +269,7 @@ class FinancePOPController extends Controller
             }
 
             $pop->save();
-            $pop->load('creator:id,full_name,email', 'unit');
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
 
             return response()->json([
                 'success' => true,
@@ -523,7 +535,7 @@ class FinancePOPController extends Controller
             // Send email notification to admin
             $this->sendReceiptUploadedNotificationToAdmin($pop, $uploaderName);
 
-            $pop->load('creator:id,full_name,email', 'unit');
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $popData = $this->formatPOPResponse($pop);
 
@@ -612,7 +624,7 @@ class FinancePOPController extends Controller
             // Send email to developer
             $this->sendSOARequestToDeveloper($pop);
 
-            $pop->load('creator:id,full_name,email', 'unit');
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $popData = $this->formatPOPResponse($pop);
 
@@ -801,7 +813,7 @@ class FinancePOPController extends Controller
             // Send notification to admin team
             $this->sendSOAUploadedNotificationToAdmin($pop, $uploaderName);
 
-            $pop->load('creator:id,full_name,email', 'unit');
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $popData = $this->formatPOPResponse($pop);
 
@@ -890,6 +902,21 @@ class FinancePOPController extends Controller
             'notificationSent' => $pop->notification_sent,
             'viewedByDeveloper' => $pop->viewed_by_developer,
             'viewedAt' => $pop->viewed_at?->format('Y-m-d H:i:s'),
+            'notes' => $pop->notes,
+            'description' => $pop->description,
+            'attachments' => $pop->attachments ? $pop->attachments->map(function ($att) {
+                return [
+                    'id' => $att->id,
+                    'fileName' => $att->file_name,
+                    'fileUrl' => $att->file_url,
+                    'fileSize' => $att->file_size,
+                    'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                ];
+            }) : [],
+            'createdBy' => $pop->creator ? [
+                'name' => $pop->creator->full_name,
+                'email' => $pop->creator->email,
+            ] : null,
             'timeline' => $pop->timeline,
         ];
     }
@@ -920,7 +947,7 @@ class FinancePOPController extends Controller
             $pop->viewed_at = now();
             $pop->save();
 
-            $pop->load('creator:id,full_name,email', 'unit');
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $popData = $this->formatPOPResponse($pop);
 
@@ -1146,6 +1173,202 @@ class FinancePOPController extends Controller
             }
         } catch (\Exception $e) {
             \Log::error('Failed to broadcast pending counts: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Upload attachment for POP
+     */
+    public function uploadAttachment(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'attachment' => 'required|file|max:10240', // 10MB max
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $pop = FinancePOP::findOrFail($id);
+            $file = $request->file('attachment');
+            
+            // Generate unique filename
+            $filename = time() . '_' . $file->getClientOriginalName();
+            $filePath = $file->storeAs('finance/pop/attachments', $filename, 'public');
+            
+            // Create attachment record
+            $attachment = $pop->attachments()->create([
+                'file_path' => $filePath,
+                'file_name' => $file->getClientOriginalName(),
+                'file_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+                'uploaded_by' => auth()->id(),
+            ]);
+
+            // Reload POP with attachments to get updated data
+            $pop = FinancePOP::with('attachments')->find($id);
+            
+            $popData = $this->formatPOPResponse($pop);
+
+            // Broadcast the update
+            broadcast(new \App\Events\FinancePOPUpdated($pop->project_name, 'attachment-added', $popData));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attachment uploaded successfully',
+                'attachment' => [
+                    'id' => $attachment->id,
+                    'fileName' => $attachment->file_name,
+                    'fileUrl' => $attachment->file_url,
+                    'fileSize' => $attachment->file_size,
+                    'uploadedAt' => $attachment->created_at->format('Y-m-d H:i:s'),
+                ],
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload attachment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete attachment from POP
+     */
+    public function deleteAttachment($id, $attachmentId)
+    {
+        try {
+            $pop = FinancePOP::findOrFail($id);
+            $attachment = $pop->attachments()->findOrFail($attachmentId);
+
+            // Delete the file from storage
+            \Storage::disk('public')->delete($attachment->file_path);
+
+            // Delete the attachment record
+            $attachment->delete();
+
+            // Reload POP with attachments to get updated data
+            $pop = FinancePOP::with('attachments')->find($id);
+            
+            $popData = $this->formatPOPResponse($pop);
+
+            // Broadcast the update
+            broadcast(new \App\Events\FinancePOPUpdated($pop->project_name, 'attachment-deleted', $popData));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attachment deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete attachment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Store a new receipt (developer-created)
+     */
+    public function storeReceipt(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'pop_number' => 'nullable|string|unique:finance_pops,pop_number',
+            'project_name' => 'required|string',
+            'unit_number' => 'required|string',
+            'attachment' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240', // 10MB max
+            'notes' => 'nullable|string',
+            'description' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            // Find the unit by project and unit number
+            $unit = \App\Models\Unit::whereHas('property', function ($query) use ($request) {
+                $query->where('project_name', $request->project_name);
+            })->where('unit', $request->unit_number)->first();
+
+            if (!$unit) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unit not found in this project',
+                ], 404);
+            }
+
+            // Generate POP number if not provided
+            $popNumber = $request->pop_number;
+            if (!$popNumber) {
+                // Get project prefix from property
+                $property = Property::where('project_name', $request->project_name)->first();
+                $prefix = $property && $property->code_prefix ? $property->code_prefix : 'PROJ';
+
+                // Use the highest existing number for this project/prefix
+                $lastPop = FinancePOP::where('project_name', $request->project_name)
+                    ->where('pop_number', 'like', $prefix . '-POP-%')
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($lastPop) {
+                    preg_match('/' . preg_quote($prefix, '/') . '-POP-(\d+)/', $lastPop->pop_number, $matches);
+                    $lastNumber = isset($matches[1]) ? intval($matches[1]) : 0;
+                    $nextNumber = $lastNumber + 1;
+                } else {
+                    $nextNumber = 1;
+                }
+
+                $popNumber = $prefix . '-POP-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+            }
+
+            // Store the receipt with structure: finance/{project_name}/{unit_no}/
+            $file = $request->file('attachment');
+            $fileName = 'RECEIPT_' . $popNumber . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $storagePath = 'finance/' . $request->project_name . '/' . $request->unit_number;
+            $path = $file->storeAs($storagePath, $fileName, 'public');
+
+            // Create the POP record with receipt path set
+            // For developer-created receipts, both attachment and receipt point to the same file
+            $pop = FinancePOP::create([
+                'pop_number' => $popNumber,
+                'project_name' => $request->project_name,
+                'unit_id' => $unit->id,
+                'unit_number' => $request->unit_number,
+                'attachment_path' => $path,
+                'attachment_name' => $fileName,
+                'receipt_path' => $path,
+                'receipt_name' => $fileName,
+                'notes' => $request->notes,
+                'description' => $request->description,
+                'created_by' => auth()->id(),
+            ]);
+
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
+
+            $popData = $this->formatPOPResponse($pop);
+
+            broadcast(new \App\Events\FinancePOPUpdated($pop->project_name, 'receipt-created', $popData));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Receipt uploaded successfully',
+                'pop' => $popData,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload receipt: ' . $e->getMessage(),
+            ], 500);
         }
     }
 }

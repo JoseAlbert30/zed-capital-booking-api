@@ -209,6 +209,10 @@ Route::middleware(['auth.developer_or_admin'])->prefix('finance')->group(functio
     Route::post('/pops/{id}/upload-soa', [FinancePOPController::class, 'uploadSOA']);
     Route::post('/pops/{id}/mark-as-viewed', [FinancePOPController::class, 'markAsViewed']);
     
+    // Developer receipt upload
+    Route::post('/receipts', [FinancePOPController::class, 'storeReceipt']);
+    Route::post('/receipts/{id}/attachments', [FinancePOPController::class, 'uploadAttachment']);
+    
     // Penalty routes (accessible by both admins and developers based on project settings)
     Route::get('/penalties', [FinancePenaltyController::class, 'index']);
     Route::post('/penalties', [FinancePenaltyController::class, 'store']);
@@ -248,6 +252,8 @@ Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
     Route::post('/pops/{id}/request-soa', [FinancePOPController::class, 'requestSOA']);
     Route::post('/pops/{id}/resend-soa', [FinancePOPController::class, 'resendSOARequest']);
     Route::post('/pops/{id}/send-receipt-to-buyer', [FinancePOPController::class, 'sendReceiptToBuyer']);
+    Route::post('/pops/{id}/attachments', [FinancePOPController::class, 'uploadAttachment']);
+    Route::delete('/pops/{id}/attachments/{attachmentId}', [FinancePOPController::class, 'deleteAttachment']);
     Route::put('/projects/{projectName}/settings', [FinancePOPController::class, 'updateProjectSettings']);
     
     

@@ -33,6 +33,7 @@ class FinancePOP extends Model
         'buyer_email',
         'created_by',
         'notes',
+        'description',
     ];
 
     protected $casts = [
@@ -63,6 +64,14 @@ class FinancePOP extends Model
     public function unit()
     {
         return $this->belongsTo(Unit::class, 'unit_id');
+    }
+
+    /**
+     * Get the attachments for this POP
+     */
+    public function attachments()
+    {
+        return $this->morphMany(\App\Models\FinanceAttachment::class, 'attachable');
     }
 
     /**

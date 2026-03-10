@@ -173,6 +173,7 @@ class FinanceSOAController extends Controller
                 'viewedAt' => $soa->viewed_at?->format('Y-m-d H:i:s'),
                 'sentToBuyer' => (bool) $soa->sent_to_buyer,
                 'sentToBuyerAt' => $soa->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'createdBy' => $soa->created_by,
                 'attachments' => $soa->attachments->map(function ($att) {
                     return [
                         'id' => $att->id,
