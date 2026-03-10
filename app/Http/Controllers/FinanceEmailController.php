@@ -36,92 +36,119 @@ class FinanceEmailController extends Controller
             // First row should be headers
             $headers = array_map('trim', array_map('strtolower', $csvData[0]));
             
-            // Validate headers
-            $requiredHeaders = ['unit_id', 'recipient_name', 'email'];
+            // Validate required headers
+            $requiredHeaders = ['unit_number', 'buyer 1 name', 'buyer 1 email'];
             foreach ($requiredHeaders as $requiredHeader) {
                 if (!in_array($requiredHeader, $headers)) {
                     return response()->json([
                         'message' => "CSV must contain '{$requiredHeader}' column",
-                        'required_headers' => $requiredHeaders
+                        'required_headers' => ['unit_number', 'buyer 1 name', 'buyer 1 email', '(optional) buyer 2 name', '(optional) buyer 2 email', '...']
                     ], 422);
                 }
             }
             
-            // Get column indices
-            $unitIdIndex = array_search('unit_id', $headers);
-            $nameIndex = array_search('recipient_name', $headers);
-            $emailIndex = array_search('email', $headers);
+            // Dynamically detect all buyer N name / buyer N email column pairs
+            $unitNumberIndex = array_search('unit_number', $headers);
+            $buyerPairs = [];
+            $buyerNum = 1;
+            while (true) {
+                $nameCol  = "buyer {$buyerNum} name";
+                $emailCol = "buyer {$buyerNum} email";
+                if (in_array($nameCol, $headers) && in_array($emailCol, $headers)) {
+                    $buyerPairs[] = [
+                        'name_index'  => array_search($nameCol, $headers),
+                        'email_index' => array_search($emailCol, $headers),
+                        'is_primary'  => $buyerNum === 1,
+                        'type'        => $buyerNum === 1 ? 'buyer' : 'co-buyer',
+                    ];
+                    $buyerNum++;
+                } else {
+                    break;
+                }
+            }
             
             // Skip the header row
             $data = array_slice($csvData, 1);
             
-            $imported = 0;
+            $importedUnits = 0;
+            $importedBuyers = 0;
             $errors = [];
             $skipped = 0;
             
             DB::beginTransaction();
             
             foreach ($data as $rowIndex => $row) {
-                $lineNumber = $rowIndex + 2; // +2 because we start from 1 and skipped header
+                $lineNumber = $rowIndex + 2;
                 
                 // Skip empty rows
-                if (empty($row) || empty($row[$unitIdIndex])) {
+                if (empty($row) || empty($row[$unitNumberIndex])) {
                     $skipped++;
                     continue;
                 }
                 
-                $unitId = trim($row[$unitIdIndex]);
-                $recipientName = trim($row[$nameIndex] ?? '');
-                $email = trim($row[$emailIndex] ?? '');
+                $unitNumber = trim($row[$unitNumberIndex]);
                 
-                // Validate email
-                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    $errors[] = "Line {$lineNumber}: Invalid email format '{$email}'";
-                    continue;
-                }
-                
-                // Verify unit exists and belongs to the property
-                $unit = Unit::where('id', $unitId)
+                // Verify unit exists by unit_number and belongs to the property
+                $unit = Unit::where('unit_number', $unitNumber)
                     ->where('property_id', $propertyId)
                     ->first();
                     
                 if (!$unit) {
-                    $errors[] = "Line {$lineNumber}: Unit ID '{$unitId}' not found in this project";
+                    $errors[] = "Line {$lineNumber}: Unit '{$unitNumber}' not found in this project";
                     continue;
                 }
                 
-                // Check if email already exists for this unit
-                $existing = FinanceEmail::where('unit_id', $unitId)
-                    ->where('email', $email)
-                    ->first();
-                    
-                if ($existing) {
-                    // Update existing record
-                    $existing->update([
-                        'recipient_name' => $recipientName,
-                        'type' => 'buyer',
-                    ]);
-                } else {
-                    // Create new record
-                    FinanceEmail::create([
-                        'unit_id' => $unitId,
-                        'email' => $email,
-                        'recipient_name' => $recipientName,
-                        'type' => 'buyer',
-                        'is_primary' => false,
-                    ]);
+                // Validate that at least buyer 1 email is present and valid
+                $buyer1EmailRaw = trim($row[$buyerPairs[0]['email_index']] ?? '');
+                if (empty($buyer1EmailRaw)) {
+                    $errors[] = "Line {$lineNumber}: Buyer 1 email is required";
+                    continue;
+                }
+                if (!filter_var($buyer1EmailRaw, FILTER_VALIDATE_EMAIL)) {
+                    $errors[] = "Line {$lineNumber}: Invalid email format for buyer 1 '{$buyer1EmailRaw}'";
+                    continue;
                 }
                 
-                $imported++;
+                // Delete all existing finance emails for this unit before re-inserting
+                FinanceEmail::where('unit_id', $unit->id)->delete();
+                
+                // Insert all buyer entries for this unit
+                foreach ($buyerPairs as $pair) {
+                    $email = trim($row[$pair['email_index']] ?? '');
+                    $name  = trim($row[$pair['name_index']] ?? '');
+                    
+                    // Skip empty optional buyers
+                    if (empty($email)) {
+                        continue;
+                    }
+                    
+                    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        $errors[] = "Line {$lineNumber}: Invalid email format '{$email}' — skipped";
+                        continue;
+                    }
+                    
+                    FinanceEmail::create([
+                        'unit_id'        => $unit->id,
+                        'email'          => $email,
+                        'recipient_name' => $name,
+                        'type'           => $pair['type'],
+                        'is_primary'     => $pair['is_primary'],
+                    ]);
+                    
+                    $importedBuyers++;
+                }
+                
+                $importedUnits++;
             }
             
             DB::commit();
             
             return response()->json([
-                'message' => 'CSV processed successfully',
-                'imported' => $imported,
-                'skipped' => $skipped,
-                'errors' => $errors,
+                'message'         => 'CSV processed successfully',
+                'imported'        => $importedUnits,
+                'imported_buyers' => $importedBuyers,
+                'skipped'         => $skipped,
+                'errors'          => $errors,
             ]);
             
         } catch (\Exception $e) {
@@ -216,9 +243,9 @@ class FinanceEmailController extends Controller
      */
     public function downloadTemplate()
     {
-        $csv = "unit_id,recipient_name,email\n";
-        $csv .= "1,John Doe,john.doe@example.com\n";
-        $csv .= "2,Jane Smith,jane.smith@example.com\n";
+        $csv = "unit_number,buyer 1 name,buyer 1 email,buyer 2 name,buyer 2 email\n";
+        $csv .= "A101,John Doe,john.doe@example.com,Jane Doe,jane.doe@example.com\n";
+        $csv .= "B202,Bob Smith,bob.smith@example.com,,\n";
         
         return response($csv, 200)
             ->header('Content-Type', 'text/csv')
