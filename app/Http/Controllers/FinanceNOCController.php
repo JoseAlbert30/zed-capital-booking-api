@@ -158,7 +158,7 @@ class FinanceNOCController extends Controller
                 $this->sendNOCNotificationToDeveloper($noc);
             }
 
-            $noc->load('creator:id,full_name,email', 'unit');
+            $noc->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $nocData = [
                 'id' => $noc->id,
@@ -166,13 +166,26 @@ class FinanceNOCController extends Controller
                 'nocName' => $noc->noc_name,
                 'unitNumber' => $noc->unit_number,
                 'unitId' => $noc->unit_id,
+                'projectName' => $noc->project_name,
                 'description' => $noc->description,
+                'notes' => $noc->notes,
                 'documentUrl' => $noc->document_url,
                 'documentName' => $noc->document_name,
                 'date' => $noc->created_at->format('Y-m-d'),
                 'notificationSent' => $noc->notification_sent,
                 'viewedByDeveloper' => $noc->viewed_by_developer,
                 'viewedAt' => $noc->viewed_at?->format('Y-m-d H:i:s'),
+                'sentToBuyer' => (bool) $noc->sent_to_buyer,
+                'sentToBuyerAt' => $noc->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'attachments' => $noc->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
                 'timeline' => $noc->timeline,
             ];
 
@@ -261,7 +274,7 @@ class FinanceNOCController extends Controller
                 $this->broadcastPendingCountsForProject($noc->project_name);
             }
 
-            $noc->load('creator:id,full_name,email', 'unit');
+            $noc->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $nocData = [
                 'id' => $noc->id,
@@ -269,13 +282,26 @@ class FinanceNOCController extends Controller
                 'nocName' => $noc->noc_name,
                 'unitNumber' => $noc->unit_number,
                 'unitId' => $noc->unit_id,
+                'projectName' => $noc->project_name,
                 'description' => $noc->description,
+                'notes' => $noc->notes,
                 'documentUrl' => $noc->document_url,
                 'documentName' => $noc->document_name,
                 'date' => $noc->created_at->format('Y-m-d'),
                 'notificationSent' => $noc->notification_sent,
                 'viewedByDeveloper' => $noc->viewed_by_developer,
                 'viewedAt' => $noc->viewed_at?->format('Y-m-d H:i:s'),
+                'sentToBuyer' => (bool) $noc->sent_to_buyer,
+                'sentToBuyerAt' => $noc->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'attachments' => $noc->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
                 'timeline' => $noc->timeline,
             ];
 
@@ -371,7 +397,7 @@ class FinanceNOCController extends Controller
                 $noc->viewed_at = now();
                 $noc->save();
 
-                $noc->load('creator:id,full_name,email', 'unit');
+                $noc->load('creator:id,full_name,email', 'unit', 'attachments');
 
                 $nocData = [
                     'id' => $noc->id,
@@ -379,13 +405,26 @@ class FinanceNOCController extends Controller
                     'nocName' => $noc->noc_name,
                     'unitNumber' => $noc->unit_number,
                     'unitId' => $noc->unit_id,
+                    'projectName' => $noc->project_name,
                     'description' => $noc->description,
+                    'notes' => $noc->notes,
                     'documentUrl' => $noc->document_url,
                     'documentName' => $noc->document_name,
                     'date' => $noc->created_at->format('Y-m-d'),
                     'notificationSent' => $noc->notification_sent,
                     'viewedByDeveloper' => $noc->viewed_by_developer,
                     'viewedAt' => $noc->viewed_at?->format('Y-m-d H:i:s'),
+                    'sentToBuyer' => (bool) $noc->sent_to_buyer,
+                    'sentToBuyerAt' => $noc->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                    'attachments' => $noc->attachments->map(function ($att) {
+                        return [
+                            'id' => $att->id,
+                            'fileName' => $att->file_name,
+                            'fileUrl' => $att->file_url,
+                            'fileSize' => $att->file_size,
+                            'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                        ];
+                    }),
                     'timeline' => $noc->timeline,
                 ];
 
@@ -604,18 +643,39 @@ class FinanceNOCController extends Controller
             $noc->sent_to_buyer_email = $buyerEmail;
             $noc->save();
 
+            $noc->load('creator:id,full_name,email', 'unit', 'attachments');
+
             $nocData = [
                 'id' => $noc->id,
                 'nocNumber' => $noc->noc_number,
                 'nocName' => $noc->noc_name,
                 'unitNumber' => $noc->unit_number,
                 'unitId' => $noc->unit_id,
+                'projectName' => $noc->project_name,
+                'description' => $noc->description,
+                'notes' => $noc->notes,
                 'documentUrl' => $noc->document_url,
                 'documentName' => $noc->document_name,
                 'date' => $noc->created_at->format('Y-m-d'),
-                'sentToBuyer' => $noc->sent_to_buyer,
+                'notificationSent' => $noc->notification_sent,
+                'viewedByDeveloper' => $noc->viewed_by_developer,
+                'viewedAt' => $noc->viewed_at?->format('Y-m-d H:i:s'),
+                'sentToBuyer' => (bool) $noc->sent_to_buyer,
                 'sentToBuyerAt' => $noc->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'attachments' => $noc->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
+                'timeline' => $noc->timeline,
             ];
+
+            // Broadcast the event
+            broadcast(new FinanceNOCUpdated($noc->project_name, 'sent-to-buyer', $nocData));
 
             return response()->json([
                 'success' => true,
@@ -663,6 +723,34 @@ class FinanceNOCController extends Controller
                 'file_size' => $file->getSize(),
                 'uploaded_by' => Auth::id(),
             ]);
+
+            // Reload NOC with attachments to get updated data
+            $noc = FinanceNOC::with('attachments')->find($id);
+            
+            $nocData = [
+                'id' => $noc->id,
+                'nocNumber' => $noc->noc_number,
+                'nocName' => $noc->noc_name,
+                'unitNumber' => $noc->unit_number,
+                'unitId' => $noc->unit_id,
+                'description' => $noc->description,
+                'documentUrl' => $noc->document_url,
+                'documentName' => $noc->document_name,
+                'date' => $noc->created_at->format('Y-m-d'),
+                'notes' => $noc->notes,
+                'attachments' => $noc->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
+            ];
+
+            // Broadcast the update
+            broadcast(new FinanceNOCUpdated($noc->project_name, 'attachment-added', $nocData));
 
             return response()->json([
                 'success' => true,

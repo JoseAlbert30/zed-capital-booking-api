@@ -155,20 +155,33 @@ class FinanceSOAController extends Controller
                 $this->sendSOANotificationToDeveloper($soa);
             }
 
-            $soa->load('creator:id,full_name,email', 'unit');
+            $soa->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $soaData = [
                 'id' => $soa->id,
                 'soaNumber' => $soa->soa_number,
                 'unitNumber' => $soa->unit_number,
                 'unitId' => $soa->unit_id,
+                'projectName' => $soa->project_name,
                 'description' => $soa->description,
+                'notes' => $soa->notes,
                 'documentUrl' => $soa->document_url,
                 'documentName' => $soa->document_name,
                 'date' => $soa->created_at->format('Y-m-d'),
                 'notificationSent' => $soa->notification_sent,
                 'viewedByDeveloper' => $soa->viewed_by_developer,
                 'viewedAt' => $soa->viewed_at?->format('Y-m-d H:i:s'),
+                'sentToBuyer' => (bool) $soa->sent_to_buyer,
+                'sentToBuyerAt' => $soa->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'attachments' => $soa->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
                 'timeline' => $soa->timeline,
             ];
 
@@ -261,20 +274,33 @@ class FinanceSOAController extends Controller
                 $this->broadcastPendingCountsForProject($soa->project_name);
             }
 
-            $soa->load('creator:id,full_name,email', 'unit');
+            $soa->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $soaData = [
                 'id' => $soa->id,
                 'soaNumber' => $soa->soa_number,
                 'unitNumber' => $soa->unit_number,
                 'unitId' => $soa->unit_id,
+                'projectName' => $soa->project_name,
                 'description' => $soa->description,
+                'notes' => $soa->notes,
                 'documentUrl' => $soa->document_url,
                 'documentName' => $soa->document_name,
                 'date' => $soa->created_at->format('Y-m-d'),
                 'notificationSent' => $soa->notification_sent,
                 'viewedByDeveloper' => $soa->viewed_by_developer,
                 'viewedAt' => $soa->viewed_at?->format('Y-m-d H:i:s'),
+                'sentToBuyer' => (bool) $soa->sent_to_buyer,
+                'sentToBuyerAt' => $soa->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'attachments' => $soa->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
                 'timeline' => $soa->timeline,
             ];
 
@@ -370,20 +396,33 @@ class FinanceSOAController extends Controller
                 $soa->viewed_at = now();
                 $soa->save();
 
-                $soa->load('creator:id,full_name,email', 'unit');
+                $soa->load('creator:id,full_name,email', 'unit', 'attachments');
 
                 $soaData = [
                     'id' => $soa->id,
                     'soaNumber' => $soa->soa_number,
                     'unitNumber' => $soa->unit_number,
                     'unitId' => $soa->unit_id,
+                    'projectName' => $soa->project_name,
                     'description' => $soa->description,
+                    'notes' => $soa->notes,
                     'documentUrl' => $soa->document_url,
                     'documentName' => $soa->document_name,
                     'date' => $soa->created_at->format('Y-m-d'),
                     'notificationSent' => $soa->notification_sent,
                     'viewedByDeveloper' => $soa->viewed_by_developer,
                     'viewedAt' => $soa->viewed_at?->format('Y-m-d H:i:s'),
+                    'sentToBuyer' => (bool) $soa->sent_to_buyer,
+                    'sentToBuyerAt' => $soa->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                    'attachments' => $soa->attachments->map(function ($att) {
+                        return [
+                            'id' => $att->id,
+                            'fileName' => $att->file_name,
+                            'fileUrl' => $att->file_url,
+                            'fileSize' => $att->file_size,
+                            'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                        ];
+                    }),
                     'timeline' => $soa->timeline,
                 ];
 
@@ -590,22 +629,33 @@ class FinanceSOAController extends Controller
             $soa->sent_to_buyer_email = $buyerEmail;
             $soa->save();
 
-            $soa->load('creator:id,full_name,email', 'unit');
+            $soa->load('creator:id,full_name,email', 'unit', 'attachments');
 
             $soaData = [
                 'id' => $soa->id,
                 'soaNumber' => $soa->soa_number,
                 'unitNumber' => $soa->unit_number,
                 'unitId' => $soa->unit_id,
+                'projectName' => $soa->project_name,
                 'description' => $soa->description,
+                'notes' => $soa->notes,
                 'documentUrl' => $soa->document_url,
                 'documentName' => $soa->document_name,
                 'date' => $soa->created_at->format('Y-m-d'),
                 'notificationSent' => $soa->notification_sent,
                 'viewedByDeveloper' => $soa->viewed_by_developer,
                 'viewedAt' => $soa->viewed_at?->format('Y-m-d H:i:s'),
-                'sentToBuyer' => $soa->sent_to_buyer,
+                'sentToBuyer' => (bool) $soa->sent_to_buyer,
                 'sentToBuyerAt' => $soa->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'attachments' => $soa->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
                 'timeline' => $soa->timeline,
             ];
 
@@ -746,6 +796,39 @@ class FinanceSOAController extends Controller
                 'file_size' => $file->getSize(),
                 'uploaded_by' => Auth::id(),
             ]);
+
+            // Reload SOA with attachments to get updated data
+            $soa = FinanceSOA::with('attachments')->find($id);
+            
+            $soaData = [
+                'id' => $soa->id,
+                'soaNumber' => $soa->soa_number,
+                'unitNumber' => $soa->unit_number,
+                'projectName' => $soa->project_name,
+                'description' => $soa->description,
+                'notes' => $soa->notes,
+                'documentPath' => $soa->document_path ? asset('storage/' . $soa->document_path) : null,
+                'documentName' => $soa->document_name,
+                'documentSize' => $soa->document_size,
+                'uploadedAt' => $soa->uploaded_at ? $soa->uploaded_at->format('Y-m-d H:i:s') : null,
+                'sentToBuyer' => (bool) $soa->sent_to_buyer,
+                'sentAt' => $soa->sent_at ? $soa->sent_at->format('Y-m-d H:i:s') : null,
+                'viewedByBuyer' => (bool) $soa->viewed_by_buyer,
+                'viewedAt' => $soa->viewed_at ? $soa->viewed_at->format('Y-m-d H:i:s') : null,
+                'createdAt' => $soa->created_at->format('Y-m-d H:i:s'),
+                'attachments' => $soa->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
+            ];
+            
+            // Broadcast the update
+            broadcast(new FinanceSOAUpdated($soa->project_name, 'attachment-added', $soaData));
 
             return response()->json([
                 'success' => true,
