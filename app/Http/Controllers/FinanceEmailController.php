@@ -32,117 +32,152 @@ class FinanceEmailController extends Controller
 
         try {
             $csvData = array_map('str_getcsv', file($file->getRealPath()));
-            
-            // First row should be headers
-            $headers = array_map('trim', array_map('strtolower', $csvData[0]));
-            
-            // Validate required headers
-            $requiredHeaders = ['unit_number', 'buyer 1 name', 'buyer 1 email'];
-            foreach ($requiredHeaders as $requiredHeader) {
-                if (!in_array($requiredHeader, $headers)) {
-                    return response()->json([
-                        'message' => "CSV must contain '{$requiredHeader}' column",
-                        'required_headers' => ['unit_number', 'buyer 1 name', 'buyer 1 email', '(optional) buyer 2 name', '(optional) buyer 2 email', '...']
-                    ], 422);
+
+            // First row should be headers — normalise: trim, lowercase, collapse spaces
+            // Also strip UTF-8 BOM that Excel adds to CSV files
+            $headers = array_map(function ($h) {
+                $h = preg_replace('/^\xEF\xBB\xBF/', '', $h); // strip BOM
+                return preg_replace('/\s+/', ' ', strtolower(trim($h)));
+            }, $csvData[0]);
+
+            // Accept common variations for the unit column
+            $unitColAliases = ['unit_number', 'unit no.', 'unit no', 'unit number', 'unit'];
+            $unitNumberIndex = null;
+            foreach ($unitColAliases as $alias) {
+                $idx = array_search($alias, $headers);
+                if ($idx !== false) {
+                    $unitNumberIndex = $idx;
+                    break;
                 }
             }
-            
-            // Dynamically detect all buyer N name / buyer N email column pairs
-            $unitNumberIndex = array_search('unit_number', $headers);
+
+            if ($unitNumberIndex === null) {
+                return response()->json([
+                    'message' => 'CSV must contain a unit column (e.g. "unit_number" or "UNIT NO.")',
+                ], 422);
+            }
+
+            // Dynamically detect all "buyer N name" / "buyer N email" column pairs
             $buyerPairs = [];
-            $buyerNum = 1;
+            $buyerNum   = 1;
             while (true) {
                 $nameCol  = "buyer {$buyerNum} name";
                 $emailCol = "buyer {$buyerNum} email";
-                if (in_array($nameCol, $headers) && in_array($emailCol, $headers)) {
-                    $buyerPairs[] = [
-                        'name_index'  => array_search($nameCol, $headers),
-                        'email_index' => array_search($emailCol, $headers),
-                        'is_primary'  => $buyerNum === 1,
-                        'type'        => $buyerNum === 1 ? 'buyer' : 'co-buyer',
-                    ];
+                $ni = array_search($nameCol, $headers);
+                $ei = array_search($emailCol, $headers);
+                if ($ni !== false && $ei !== false) {
+                    $buyerPairs[] = ['name_index' => $ni, 'email_index' => $ei];
                     $buyerNum++;
                 } else {
                     break;
                 }
             }
-            
+
+            if (empty($buyerPairs)) {
+                return response()->json([
+                    'message' => 'CSV must contain at least "buyer 1 name" and "buyer 1 email" columns',
+                ], 422);
+            }
+
             // Skip the header row
             $data = array_slice($csvData, 1);
-            
-            $importedUnits = 0;
+
+            $importedUnits  = 0;
             $importedBuyers = 0;
-            $errors = [];
+            $errors  = [];
             $skipped = 0;
-            
+
+            // Placeholder values that mean "no buyer"
+            $placeholders = ['-', '–', '—', 'n/a', 'none', ''];
+
             DB::beginTransaction();
-            
+
             foreach ($data as $rowIndex => $row) {
                 $lineNumber = $rowIndex + 2;
-                
-                // Skip empty rows
-                if (empty($row) || empty($row[$unitNumberIndex])) {
+
+                // Skip completely empty rows
+                if (empty($row) || !isset($row[$unitNumberIndex])) {
                     $skipped++;
                     continue;
                 }
-                
+
                 $unitNumber = trim($row[$unitNumberIndex]);
-                
-                // Verify unit exists by unit_number and belongs to the property
-                $unit = Unit::where('unit_number', $unitNumber)
+                if ($unitNumber === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                // Find unit by unit name within this property
+                $unit = Unit::where('unit', $unitNumber)
                     ->where('property_id', $propertyId)
                     ->first();
-                    
+
                 if (!$unit) {
                     $errors[] = "Line {$lineNumber}: Unit '{$unitNumber}' not found in this project";
                     continue;
                 }
-                
-                // Validate that at least buyer 1 email is present and valid
-                $buyer1EmailRaw = trim($row[$buyerPairs[0]['email_index']] ?? '');
-                if (empty($buyer1EmailRaw)) {
-                    $errors[] = "Line {$lineNumber}: Buyer 1 email is required";
-                    continue;
-                }
-                if (!filter_var($buyer1EmailRaw, FILTER_VALIDATE_EMAIL)) {
-                    $errors[] = "Line {$lineNumber}: Invalid email format for buyer 1 '{$buyer1EmailRaw}'";
-                    continue;
-                }
-                
-                // Delete all existing finance emails for this unit before re-inserting
-                FinanceEmail::where('unit_id', $unit->id)->delete();
-                
-                // Insert all buyer entries for this unit
+
+                // Build the flat list of {name, email} entries for this unit,
+                // expanding any "/" in an email field into extra CC entries.
+                $entries = [];
                 foreach ($buyerPairs as $pair) {
-                    $email = trim($row[$pair['email_index']] ?? '');
-                    $name  = trim($row[$pair['name_index']] ?? '');
-                    
-                    // Skip empty optional buyers
-                    if (empty($email)) {
+                    $rawEmail = trim($row[$pair['email_index']] ?? '');
+                    $rawName  = trim($row[$pair['name_index']]  ?? '');
+
+                    // Skip placeholder names / empty emails
+                    if (in_array(strtolower($rawName), $placeholders) && $rawEmail === '') {
                         continue;
                     }
-                    
-                    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                        $errors[] = "Line {$lineNumber}: Invalid email format '{$email}' — skipped";
+                    if ($rawEmail === '') {
                         continue;
                     }
-                    
+
+                    // Split on "/" to handle "email1 / email2" patterns
+                    $emailParts = array_filter(array_map('trim', preg_split('/\s*\/\s*/', $rawEmail)));
+
+                    foreach ($emailParts as $emailPart) {
+                        if ($emailPart === '') continue;
+                        $entries[] = ['name' => $rawName, 'email' => $emailPart];
+                    }
+                }
+
+                // Skip units with no valid buyer info (e.g. all "-" rows)
+                if (empty($entries)) {
+                    $skipped++;
+                    continue;
+                }
+
+                // Validate the first (primary) email
+                if (!filter_var($entries[0]['email'], FILTER_VALIDATE_EMAIL)) {
+                    $errors[] = "Line {$lineNumber}: Invalid primary email '{$entries[0]['email']}' — row skipped";
+                    continue;
+                }
+
+                // Delete existing and re-insert
+                FinanceEmail::where('unit_id', $unit->id)->delete();
+
+                foreach ($entries as $i => $entry) {
+                    if (!filter_var($entry['email'], FILTER_VALIDATE_EMAIL)) {
+                        $errors[] = "Line {$lineNumber}: Invalid email '{$entry['email']}' — skipped";
+                        continue;
+                    }
+
                     FinanceEmail::create([
                         'unit_id'        => $unit->id,
-                        'email'          => $email,
-                        'recipient_name' => $name,
-                        'type'           => $pair['type'],
-                        'is_primary'     => $pair['is_primary'],
+                        'email'          => $entry['email'],
+                        'recipient_name' => $entry['name'],
+                        'type'           => $i === 0 ? 'buyer' : 'co-buyer',
+                        'is_primary'     => $i === 0,
                     ]);
-                    
+
                     $importedBuyers++;
                 }
-                
+
                 $importedUnits++;
             }
-            
+
             DB::commit();
-            
+
             return response()->json([
                 'message'         => 'CSV processed successfully',
                 'imported'        => $importedUnits,
@@ -150,7 +185,7 @@ class FinanceEmailController extends Controller
                 'skipped'         => $skipped,
                 'errors'          => $errors,
             ]);
-            
+
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
@@ -181,9 +216,13 @@ class FinanceEmailController extends Controller
         $financeEmails = FinanceEmail::whereHas('unit', function($query) use ($propertyId) {
             $query->where('property_id', $propertyId);
         })
-        ->with('unit:id,unit_number,property_id')
+        ->with('unit:id,unit,property_id')
         ->orderBy('unit_id')
-        ->get();
+        ->get()
+        ->map(function ($fe) {
+            $fe->unit_number = $fe->unit?->unit ?? null;
+            return $fe;
+        });
         
         return response()->json([
             'finance_emails' => $financeEmails
