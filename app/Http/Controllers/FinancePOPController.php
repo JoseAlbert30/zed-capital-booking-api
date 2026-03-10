@@ -571,9 +571,18 @@ class FinancePOPController extends Controller
     private function sendReceiptUploadedNotificationToAdmin(FinancePOP $pop, string $developerName)
     {
         try {
-            $adminEmails = [
-                'wbd@zedcapital.ae'
-            ];
+            $property = Property::where('project_name', $pop->project_name)->first();
+            $adminEmails = ['wbd@zedcapital.ae'];
+            $adminCcEmails = [];
+            if ($property && $property->admin_emails) {
+                $parsed = array_filter(array_map('trim', explode(',', $property->admin_emails)));
+                if (!empty($parsed)) {
+                    $adminEmails = $parsed;
+                }
+            }
+            if ($property && $property->admin_cc_emails) {
+                $adminCcEmails = array_filter(array_map('trim', explode(',', $property->admin_cc_emails)));
+            }
 
             $emailData = [
                 'subject' => "Receipt Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}",
@@ -590,9 +599,12 @@ class FinancePOPController extends Controller
                 'buttonText' => 'View Receipt',
             ];
 
-            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $pop) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $pop) {
                 $message->to($adminEmails)
                     ->subject("Receipt Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}");
+                if (!empty($adminCcEmails)) {
+                    $message->cc($adminCcEmails);
+                }
             });
 
         } catch (\Exception $e) {
@@ -860,9 +872,18 @@ class FinancePOPController extends Controller
     private function sendSOAUploadedNotificationToAdmin(FinancePOP $pop, string $developerName)
     {
         try {
-            $adminEmails = [
-                'wbd@zedcapital.ae'
-            ];
+            $property = Property::where('project_name', $pop->project_name)->first();
+            $adminEmails = ['wbd@zedcapital.ae'];
+            $adminCcEmails = [];
+            if ($property && $property->admin_emails) {
+                $parsed = array_filter(array_map('trim', explode(',', $property->admin_emails)));
+                if (!empty($parsed)) {
+                    $adminEmails = $parsed;
+                }
+            }
+            if ($property && $property->admin_cc_emails) {
+                $adminCcEmails = array_filter(array_map('trim', explode(',', $property->admin_cc_emails)));
+            }
 
             $emailData = [
                 'subject' => "SOA Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}",
@@ -879,9 +900,12 @@ class FinancePOPController extends Controller
                 'buttonText' => 'View SOA Documents',
             ];
 
-            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $pop) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $pop) {
                 $message->to($adminEmails)
                     ->subject("SOA Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}");
+                if (!empty($adminCcEmails)) {
+                    $message->cc($adminCcEmails);
+                }
             });
 
         } catch (\Exception $e) {

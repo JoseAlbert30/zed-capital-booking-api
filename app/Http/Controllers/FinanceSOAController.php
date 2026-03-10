@@ -519,9 +519,18 @@ class FinanceSOAController extends Controller
     private function sendSOADocumentUploadedNotificationToAdmin(FinanceSOA $soa, string $developerName)
     {
         try {
-            $adminEmails = [
-                'wbd@zedcapital.ae'
-            ];
+            $property = Property::where('project_name', $soa->project_name)->first();
+            $adminEmails = ['wbd@zedcapital.ae'];
+            $adminCcEmails = [];
+            if ($property && $property->admin_emails) {
+                $parsed = array_filter(array_map('trim', explode(',', $property->admin_emails)));
+                if (!empty($parsed)) {
+                    $adminEmails = $parsed;
+                }
+            }
+            if ($property && $property->admin_cc_emails) {
+                $adminCcEmails = array_filter(array_map('trim', explode(',', $property->admin_cc_emails)));
+            }
 
             $emailData = [
                 'subject' => "SOA Document Uploaded: Unit {$soa->unit_number} - {$soa->project_name}",
@@ -538,9 +547,12 @@ class FinanceSOAController extends Controller
                 'buttonText' => 'View SOA Document',
             ];
 
-            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $soa) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $soa) {
                 $message->to($adminEmails)
                     ->subject("SOA Document Uploaded: Unit {$soa->unit_number} - {$soa->project_name}");
+                if (!empty($adminCcEmails)) {
+                    $message->cc($adminCcEmails);
+                }
             });
 
         } catch (\Exception $e) {

@@ -557,9 +557,18 @@ class FinancePenaltyController extends Controller
     private function sendPenaltyDocumentUploadedNotificationToAdmin(FinancePenalty $penalty, string $developerName)
     {
         try {
-            $adminEmails = [
-                'wbd@zedcapital.ae'
-            ];
+            $property = Property::where('project_name', $penalty->project_name)->first();
+            $adminEmails = ['wbd@zedcapital.ae'];
+            $adminCcEmails = [];
+            if ($property && $property->admin_emails) {
+                $parsed = array_filter(array_map('trim', explode(',', $property->admin_emails)));
+                if (!empty($parsed)) {
+                    $adminEmails = $parsed;
+                }
+            }
+            if ($property && $property->admin_cc_emails) {
+                $adminCcEmails = array_filter(array_map('trim', explode(',', $property->admin_cc_emails)));
+            }
 
             $emailData = [
                 'subject' => "Penalty Document Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}",
@@ -577,9 +586,12 @@ class FinancePenaltyController extends Controller
                 'buttonText' => 'View Document',
             ];
 
-            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $penalty) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $penalty) {
                 $message->to($adminEmails)
                     ->subject("Penalty Document Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
+                if (!empty($adminCcEmails)) {
+                    $message->cc($adminCcEmails);
+                }
             });
 
         } catch (\Exception $e) {
@@ -879,12 +891,25 @@ class FinancePenaltyController extends Controller
                 'buttonText' => 'View Receipt',
             ];
 
-            // Send to admin email or configured emails
-            $adminEmail = 'wbd@zedcapital.ae';
+            // Use per-project admin emails; fall back to default if not configured
+            $adminEmails = ['wbd@zedcapital.ae'];
+            $adminCcEmails = [];
+            if ($property && $property->admin_emails) {
+                $parsed = array_filter(array_map('trim', explode(',', $property->admin_emails)));
+                if (!empty($parsed)) {
+                    $adminEmails = $parsed;
+                }
+            }
+            if ($property && $property->admin_cc_emails) {
+                $adminCcEmails = array_filter(array_map('trim', explode(',', $property->admin_cc_emails)));
+            }
 
-            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($penalty, $adminEmail) {
-                $message->to($adminEmail)
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $penalty) {
+                $message->to($adminEmails)
                     ->subject("Penalty Receipt Uploaded: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
+                if (!empty($adminCcEmails)) {
+                    $message->cc($adminCcEmails);
+                }
             });
 
         } catch (\Exception $e) {
@@ -1233,9 +1258,17 @@ class FinancePenaltyController extends Controller
     private function sendPenaltyNotificationToAdmin(FinancePenalty $penalty, Property $property)
     {
         try {
-            $adminEmails = [
-                'wbd@zedcapital.ae'
-            ];
+            $adminEmails = ['wbd@zedcapital.ae'];
+            $adminCcEmails = [];
+            if ($property->admin_emails) {
+                $parsed = array_filter(array_map('trim', explode(',', $property->admin_emails)));
+                if (!empty($parsed)) {
+                    $adminEmails = $parsed;
+                }
+            }
+            if ($property->admin_cc_emails) {
+                $adminCcEmails = array_filter(array_map('trim', explode(',', $property->admin_cc_emails)));
+            }
 
             $developerName = $property->developer_name ?? 'Developer';
             $emailData = [
@@ -1256,9 +1289,12 @@ class FinancePenaltyController extends Controller
                 'buttonText' => 'View in Dashboard',
             ];
 
-            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $penalty) {
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $penalty) {
                 $message->to($adminEmails)
                     ->subject("New Penalty Submitted by Developer: {$penalty->penalty_name} - Unit {$penalty->unit_number}");
+                if (!empty($adminCcEmails)) {
+                    $message->cc($adminCcEmails);
+                }
             });
 
             // Update penalty notification status
