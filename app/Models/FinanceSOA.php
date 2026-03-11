@@ -65,6 +65,14 @@ class FinanceSOA extends Model
     }
 
     /**
+     * Get developer notes for this item
+     */
+    public function devNotes()
+    {
+        return $this->morphMany(FinanceNote::class, 'noteable');
+    }
+
+    /**
      * Get the document URL attribute
      */
     public function getDocumentUrlAttribute()

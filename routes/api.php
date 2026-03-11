@@ -13,6 +13,7 @@ use App\Http\Controllers\FinanceNOCController;
 use App\Http\Controllers\FinanceSOAController;
 use App\Http\Controllers\FinanceThirdpartyController;
 use App\Http\Controllers\FinanceEmailController;
+use App\Http\Controllers\FinanceNoteController;
 use App\Http\Controllers\DeveloperPortalController;
 use App\Http\Controllers\DevAuthController;
 use Illuminate\Http\Request;
@@ -206,6 +207,7 @@ Route::middleware(['auth.developer_or_admin'])->prefix('finance')->group(functio
     Route::get('/pops', [FinancePOPController::class, 'index']);
     Route::get('/projects/{projectName}/settings', [FinancePOPController::class, 'getProjectSettings']);
     Route::post('/pops/{id}/upload-receipt', [FinancePOPController::class, 'uploadReceipt']);
+    Route::post('/pops/{id}/units/{unitNumber}/upload-receipt', [FinancePOPController::class, 'uploadReceiptForUnit']);
     Route::post('/pops/{id}/upload-soa', [FinancePOPController::class, 'uploadSOA']);
     Route::post('/pops/{id}/mark-as-viewed', [FinancePOPController::class, 'markAsViewed']);
     
@@ -238,6 +240,11 @@ Route::middleware(['auth.developer_or_admin'])->prefix('finance')->group(functio
     Route::get('/thirdparties', [FinanceThirdpartyController::class, 'index']);
     Route::post('/thirdparties/{id}/upload-receipt', [FinanceThirdpartyController::class, 'uploadReceipt']);
     Route::post('/thirdparties/{id}/mark-as-viewed', [FinanceThirdpartyController::class, 'markAsViewed']);
+
+    // Developer Notes (accessible by both admins and developers)
+    Route::get('/notes', [FinanceNoteController::class, 'index']);
+    Route::post('/notes', [FinanceNoteController::class, 'store']);
+    Route::post('/notes/{id}/read', [FinanceNoteController::class, 'markRead']);
 });
 
 // Units endpoint for project filtering (accessible by both admins and developers)
@@ -296,6 +303,9 @@ Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
     Route::delete('/emails/by-project', [FinanceEmailController::class, 'deleteByProject']);
     Route::delete('/emails/{id}', [FinanceEmailController::class, 'delete']);
     Route::get('/emails/template', [FinanceEmailController::class, 'downloadTemplate']);
+
+    // Finance Notes - admin-only actions
+    Route::delete('/notes/{id}', [FinanceNoteController::class, 'destroy']);
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {

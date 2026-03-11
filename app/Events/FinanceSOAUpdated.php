@@ -57,6 +57,7 @@ class FinanceSOAUpdated implements ShouldBroadcastNow
         return [
             'action' => $this->action,
             'soa' => $this->soa,
+            'timestamp' => now()->toIso8601String(),
         ];
     }
 }

@@ -75,6 +75,22 @@ class FinancePOP extends Model
     }
 
     /**
+     * Get all units associated with this POP (multi-unit support)
+     */
+    public function popUnits()
+    {
+        return $this->hasMany(FinancePOPUnit::class, 'pop_id');
+    }
+
+    /**
+     * Get developer notes for this item
+     */
+    public function devNotes()
+    {
+        return $this->morphMany(FinanceNote::class, 'noteable');
+    }
+
+    /**
      * Get the full URL for the attachment
      */
     public function getAttachmentUrlAttribute()

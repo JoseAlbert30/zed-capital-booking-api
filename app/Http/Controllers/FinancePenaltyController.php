@@ -1206,6 +1206,11 @@ class FinancePenaltyController extends Controller
                 'uploaded_by' => Auth::id(),
             ]);
 
+            // Reload relationships and broadcast attachment-added
+            $penalty->load(['creator:id,full_name,email', 'unit', 'attachments', 'property']);
+            $penaltyData = $this->formatPenaltyData($penalty);
+            broadcast(new FinancePenaltyUpdated($penalty->project_name, 'attachment-added', $penaltyData));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Attachment uploaded successfully',
@@ -1321,6 +1326,8 @@ class FinancePenaltyController extends Controller
             'penaltyName' => $penalty->penalty_name,
             'unitNumber' => $penalty->unit_number,
             'unitId' => $penalty->unit_id,
+            'projectName' => $penalty->project_name,
+            'amount' => (float) $penalty->amount,
             'description' => $penalty->description,
             'penaltyInitiatedBy' => $penalty->property?->penalty_initiated_by ?? 'admin',
             'documentUrl' => $this->stripStorageUrl($penalty->document_url),

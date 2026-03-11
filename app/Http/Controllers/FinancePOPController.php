@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FinancePOP;
+use App\Models\FinancePOPUnit;
 use App\Models\DeveloperMagicLink;
 use App\Models\Property;
 use App\Models\DevUser;
@@ -44,7 +45,7 @@ class FinancePOPController extends Controller
             }
         }
 
-        $query = FinancePOP::with(['creator:id,full_name,email', 'unit', 'attachments'])
+        $query = FinancePOP::with(['creator:id,full_name,email', 'unit', 'attachments', 'popUnits'])
             ->orderBy('created_at', 'desc');
 
         if ($project) {
@@ -92,6 +93,24 @@ class FinancePOPController extends Controller
                         'id' => $pop->unit->id,
                         'unit_number' => $pop->unit->unit_number,
                     ] : null,
+                    'units' => $pop->popUnits ? $pop->popUnits->map(function ($pu) {
+                        return [
+                            'id' => $pu->id,
+                            'unitId' => $pu->unit_id,
+                            'unitNumber' => $pu->unit_number,
+                            'receiptPath' => $pu->receipt_path,
+                            'receiptName' => $pu->receipt_name,
+                            'receiptUrl' => $pu->receipt_url,
+                            'receiptUploadedAt' => $pu->receipt_uploaded_at?->format('Y-m-d H:i:s'),
+                            'receiptUploadedBy' => $pu->receipt_uploaded_by,
+                        ];
+                    }) : [],
+                    'unitNumbers' => $pop->popUnits && $pop->popUnits->count() > 0
+                        ? $pop->popUnits->pluck('unit_number')->toArray()
+                        : [$pop->unit_number],
+                    'allReceiptsUploaded' => $pop->popUnits && $pop->popUnits->count() > 0
+                        ? $pop->popUnits->every(fn($pu) => !empty($pu->receipt_path))
+                        : !empty($pop->receipt_path),
                 ];
             }),
         ]);
@@ -105,7 +124,9 @@ class FinancePOPController extends Controller
         $validator = Validator::make($request->all(), [
             'pop_number' => 'nullable|string|unique:finance_pops,pop_number',
             'project_name' => 'required|string',
-            'unit_number' => 'required|string',
+            'unit_number' => 'nullable|string',
+            'unit_numbers' => 'nullable|array',
+            'unit_numbers.*' => 'string',
             'buyer_email' => 'nullable|email',
             'attachment' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240', // 10MB max
             'notes' => 'nullable|string',
@@ -120,16 +141,26 @@ class FinancePOPController extends Controller
             ], 422);
         }
 
+        // Determine unit numbers: support both unit_numbers[] array and single unit_number
+        $unitNumbers = $request->input('unit_numbers');
+        if (empty($unitNumbers) && $request->input('unit_number')) {
+            $unitNumbers = [$request->input('unit_number')];
+        }
+        if (empty($unitNumbers)) {
+            return response()->json(['success' => false, 'message' => 'At least one unit number is required'], 422);
+        }
+        $primaryUnitNumber = $unitNumbers[0];
+
         try {
-            // Find the unit by project and unit number
+            // Find the primary unit by project and unit number
             $unit = \App\Models\Unit::whereHas('property', function ($query) use ($request) {
                 $query->where('project_name', $request->project_name);
-            })->where('unit', $request->unit_number)->first();
+            })->where('unit', $primaryUnitNumber)->first();
 
             if (!$unit) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unit not found in this project',
+                    'message' => 'Unit not found in this project: ' . $primaryUnitNumber,
                 ], 404);
             }
 
@@ -160,15 +191,15 @@ class FinancePOPController extends Controller
             // Store the attachment with new structure: finance/{project_name}/{unit_no}/
             $file = $request->file('attachment');
             $fileName = 'POP_' . $popNumber . '_' . time() . '.' . $file->getClientOriginalExtension();
-            $storagePath = 'finance/' . $request->project_name . '/' . $request->unit_number;
+            $storagePath = 'finance/' . $request->project_name . '/' . $primaryUnitNumber;
             $path = $file->storeAs($storagePath, $fileName, 'public');
 
-            // Create the POP record
+            // Create the POP record (primary unit stored on the POP itself for backward compat)
             $pop = FinancePOP::create([
                 'pop_number' => $popNumber,
                 'project_name' => $request->project_name,
                 'unit_id' => $unit->id,
-                'unit_number' => $request->unit_number,
+                'unit_number' => $primaryUnitNumber,
                 'buyer_email' => $request->buyer_email,
                 'attachment_path' => $path,
                 'attachment_name' => $fileName,
@@ -177,12 +208,24 @@ class FinancePOPController extends Controller
                 'created_by' => auth()->id(),
             ]);
 
+            // Create finance_pop_units rows for all selected units
+            foreach ($unitNumbers as $unitNum) {
+                $unitRecord = \App\Models\Unit::whereHas('property', function ($q) use ($request) {
+                    $q->where('project_name', $request->project_name);
+                })->where('unit', $unitNum)->first();
+                FinancePOPUnit::create([
+                    'pop_id' => $pop->id,
+                    'unit_id' => $unitRecord ? $unitRecord->id : null,
+                    'unit_number' => $unitNum,
+                ]);
+            }
+
             // Handle sending email to developer if requested
             if ($request->input('send_to_developer') === 'true') {
                 $this->sendToDeveloper($pop);
             }
 
-            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments', 'popUnits');
 
             $popData = $this->formatPOPResponse($pop);
 
@@ -541,7 +584,7 @@ class FinancePOPController extends Controller
             // Send email notification to admin
             $this->sendReceiptUploadedNotificationToAdmin($pop, $uploaderName);
 
-            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments', 'popUnits');
 
             $popData = $this->formatPOPResponse($pop);
 
@@ -555,6 +598,95 @@ class FinancePOPController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Receipt uploaded successfully',
+                'pop' => $popData,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload receipt: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload receipt for a specific unit within a multi-unit POP
+     */
+    public function uploadReceiptForUnit(Request $request, $popId, $unitNumber)
+    {
+        $validator = Validator::make($request->all(), [
+            'receipt' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $pop = FinancePOP::findOrFail($popId);
+            $unitNumber = urldecode($unitNumber);
+
+            // Find the specific pop_unit row
+            $popUnit = FinancePOPUnit::where('pop_id', $pop->id)
+                ->where('unit_number', $unitNumber)
+                ->first();
+
+            if (!$popUnit) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unit ' . $unitNumber . ' not found in this POP',
+                ], 404);
+            }
+
+            $authType = $request->attributes->get('auth_type');
+            $uploaderName = ($authType === 'developer' && $request->user()) ? $request->user()->name : 'Developer';
+
+            // Store the receipt
+            $receiptFile = $request->file('receipt');
+            $receiptFileName = 'Receipt_' . $pop->pop_number . '_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $unitNumber) . '_' . time() . '.' . $receiptFile->getClientOriginalExtension();
+            $storagePath = 'finance/' . $pop->project_name . '/' . $unitNumber;
+            $receiptPath = $receiptFile->storeAs($storagePath, $receiptFileName, 'public');
+
+            // Update the pop_unit row
+            $popUnit->receipt_path = $receiptPath;
+            $popUnit->receipt_name = $receiptFileName;
+            $popUnit->receipt_uploaded_at = now();
+            $popUnit->receipt_uploaded_by = $uploaderName;
+            $popUnit->save();
+
+            // If this is the primary unit of the POP, also update POP's own receipt fields for backward compat
+            if ($pop->unit_number === $unitNumber) {
+                $pop->receipt_path = $receiptPath;
+                $pop->receipt_name = $receiptFileName;
+                $pop->receipt_uploaded_at = now();
+                $pop->receipt_uploaded_by = $uploaderName;
+                $pop->save();
+            }
+
+            // For multi-unit POPs: only notify when ALL units have receipts.
+            // For single-unit POPs (or legacy POPs with no popUnits rows): always notify.
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments', 'popUnits');
+            $hasMultipleUnits = $pop->popUnits->count() > 1;
+            $allUploaded = $pop->popUnits->count() === 0
+                || $pop->popUnits->every(fn($pu) => !empty($pu->receipt_path));
+            if (!$hasMultipleUnits || $allUploaded) {
+                $this->sendReceiptUploadedNotificationToAdmin($pop, $uploaderName);
+            }
+
+            $popData = $this->formatPOPResponse($pop);
+
+            broadcast(new \App\Events\FinancePOPUpdated($pop->project_name, 'receipt-uploaded', $popData));
+
+            if ($authType === 'developer') {
+                $this->broadcastPendingCountsForProject($pop->project_name);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Receipt uploaded for unit ' . $unitNumber,
                 'pop' => $popData,
             ]);
         } catch (\Exception $e) {
@@ -584,14 +716,26 @@ class FinancePOPController extends Controller
                 $adminCcEmails = array_filter(array_map('trim', explode(',', $property->admin_cc_emails)));
             }
 
+            // Build unit display: list all units for multi-unit POPs
+            $isMultiUnit = $pop->relationLoaded('popUnits') && $pop->popUnits->count() > 1;
+            $unitDisplay = $isMultiUnit
+                ? $pop->popUnits->pluck('unit_number')->join(', ')
+                : $pop->unit_number;
+            $subject = $isMultiUnit
+                ? "All Receipts Uploaded for POP {$pop->pop_number} ({$pop->popUnits->count()} units)"
+                : "Receipt Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}";
+            $messageBody = $isMultiUnit
+                ? "All receipts have been uploaded by {$developerName} for the following POP covering {$pop->popUnits->count()} units."
+                : "A receipt has been uploaded by {$developerName} for the following POP.";
+
             $emailData = [
-                'subject' => "Receipt Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}",
+                'subject' => $subject,
                 'greeting' => 'Receipt Upload Notification',
                 'transactionType' => 'POP Receipt',
-                'messageBody' => "A receipt has been uploaded by {$developerName} for the following POP.",
+                'messageBody' => $messageBody,
                 'details' => [
                     'POP Number' => $pop->pop_number,
-                    'Unit Number' => $pop->unit_number,
+                    'Unit(s)' => $unitDisplay,
                     'Project' => $pop->project_name,
                     'Uploaded By' => $developerName,
                 ],
@@ -599,9 +743,8 @@ class FinancePOPController extends Controller
                 'buttonText' => 'View Receipt',
             ];
 
-            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $pop) {
-                $message->to($adminEmails)
-                    ->subject("Receipt Uploaded for POP {$pop->pop_number} - Unit {$pop->unit_number}");
+            Mail::mailer('finance')->send('emails.finance-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $subject) {
+                $message->to($adminEmails)->subject($subject);
                 if (!empty($adminCcEmails)) {
                     $message->cc($adminCcEmails);
                 }
@@ -918,6 +1061,14 @@ class FinancePOPController extends Controller
      */
     private function formatPOPResponse(FinancePOP $pop)
     {
+        // Ensure popUnits is loaded
+        if (!$pop->relationLoaded('popUnits')) {
+            $pop->load('popUnits');
+        }
+
+        $popUnits = $pop->popUnits ?? collect([]);
+        $hasPopUnits = $popUnits->count() > 0;
+
         return [
             'id' => $pop->id,
             'popNumber' => $pop->pop_number,
@@ -948,6 +1099,24 @@ class FinancePOPController extends Controller
                 'email' => $pop->creator->email,
             ] : null,
             'timeline' => $pop->timeline,
+            'units' => $popUnits->map(function ($pu) {
+                return [
+                    'id' => $pu->id,
+                    'unitId' => $pu->unit_id,
+                    'unitNumber' => $pu->unit_number,
+                    'receiptPath' => $pu->receipt_path,
+                    'receiptName' => $pu->receipt_name,
+                    'receiptUrl' => $pu->receipt_url,
+                    'receiptUploadedAt' => $pu->receipt_uploaded_at?->format('Y-m-d H:i:s'),
+                    'receiptUploadedBy' => $pu->receipt_uploaded_by,
+                ];
+            })->values()->toArray(),
+            'unitNumbers' => $hasPopUnits
+                ? $popUnits->pluck('unit_number')->toArray()
+                : [$pop->unit_number],
+            'allReceiptsUploaded' => $hasPopUnits
+                ? $popUnits->every(fn($pu) => !empty($pu->receipt_path))
+                : !empty($pop->receipt_path),
         ];
     }
 
@@ -1312,7 +1481,9 @@ class FinancePOPController extends Controller
         $validator = Validator::make($request->all(), [
             'pop_number' => 'nullable|string|unique:finance_pops,pop_number',
             'project_name' => 'required|string',
-            'unit_number' => 'required|string',
+            'unit_number' => 'nullable|string',
+            'unit_numbers' => 'nullable|array',
+            'unit_numbers.*' => 'string',
             'attachment' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240', // 10MB max
             'notes' => 'nullable|string',
             'description' => 'nullable|string',
@@ -1326,16 +1497,26 @@ class FinancePOPController extends Controller
             ], 422);
         }
 
+        // Determine unit numbers
+        $unitNumbers = $request->input('unit_numbers');
+        if (empty($unitNumbers) && $request->input('unit_number')) {
+            $unitNumbers = [$request->input('unit_number')];
+        }
+        if (empty($unitNumbers)) {
+            return response()->json(['success' => false, 'message' => 'At least one unit number is required'], 422);
+        }
+        $primaryUnitNumber = $unitNumbers[0];
+
         try {
-            // Find the unit by project and unit number
+            // Find the primary unit by project and unit number
             $unit = \App\Models\Unit::whereHas('property', function ($query) use ($request) {
                 $query->where('project_name', $request->project_name);
-            })->where('unit', $request->unit_number)->first();
+            })->where('unit', $primaryUnitNumber)->first();
 
             if (!$unit) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unit not found in this project',
+                    'message' => 'Unit not found in this project: ' . $primaryUnitNumber,
                 ], 404);
             }
 
@@ -1366,16 +1547,15 @@ class FinancePOPController extends Controller
             // Store the receipt with structure: finance/{project_name}/{unit_no}/
             $file = $request->file('attachment');
             $fileName = 'RECEIPT_' . $popNumber . '_' . time() . '.' . $file->getClientOriginalExtension();
-            $storagePath = 'finance/' . $request->project_name . '/' . $request->unit_number;
+            $storagePath = 'finance/' . $request->project_name . '/' . $primaryUnitNumber;
             $path = $file->storeAs($storagePath, $fileName, 'public');
 
-            // Create the POP record with receipt path set
-            // For developer-created receipts, both attachment and receipt point to the same file
+            // Create the POP record with receipt path set (developer-created: attachment = receipt)
             $pop = FinancePOP::create([
                 'pop_number' => $popNumber,
                 'project_name' => $request->project_name,
                 'unit_id' => $unit->id,
-                'unit_number' => $request->unit_number,
+                'unit_number' => $primaryUnitNumber,
                 'attachment_path' => $path,
                 'attachment_name' => $fileName,
                 'receipt_path' => $path,
@@ -1385,7 +1565,24 @@ class FinancePOPController extends Controller
                 'created_by' => auth()->id(),
             ]);
 
-            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
+            // Create finance_pop_units rows for all selected units
+            foreach ($unitNumbers as $unitNum) {
+                $unitRecord = \App\Models\Unit::whereHas('property', function ($q) use ($request) {
+                    $q->where('project_name', $request->project_name);
+                })->where('unit', $unitNum)->first();
+                FinancePOPUnit::create([
+                    'pop_id' => $pop->id,
+                    'unit_id' => $unitRecord ? $unitRecord->id : null,
+                    'unit_number' => $unitNum,
+                    // For storeReceipt, developer is uploading one file; mark primary unit w/ receipt
+                    'receipt_path' => $unitNum === $primaryUnitNumber ? $path : null,
+                    'receipt_name' => $unitNum === $primaryUnitNumber ? $fileName : null,
+                    'receipt_uploaded_at' => $unitNum === $primaryUnitNumber ? now() : null,
+                    'receipt_uploaded_by' => $unitNum === $primaryUnitNumber ? 'Developer' : null,
+                ]);
+            }
+
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments', 'popUnits');
 
             $popData = $this->formatPOPResponse($pop);
 

@@ -170,20 +170,9 @@ class FinanceThirdpartyController extends Controller
 
             $thirdparty->load('creator:id,full_name,email', 'unit');
 
-            $thirdpartyData = [
-                'id' => $thirdparty->id,
-                'thirdpartyNumber' => $thirdparty->thirdparty_number,
-                'thirdpartyName' => $thirdparty->thirdparty_name,
-                'unitNumber' => $thirdparty->unit_number,
-                'unitId' => $thirdparty->unit_id,
-                'description' => $thirdparty->description,
-                'formDocumentUrl' => $thirdparty->form_document_url,
-                'formDocumentName' => $thirdparty->form_document_name,
-                'date' => $thirdparty->created_at->format('Y-m-d'),
-                'timeline' => $thirdparty->timeline,
-            ];
+            $thirdpartyData = $this->formatThirdpartyData($thirdparty);
 
-            broadcast(new \App\Events\FinanceThirdpartyUpdated($thirdparty->project_name, 'created', $thirdpartyData));
+            broadcast(new FinanceThirdpartyUpdated($thirdparty->project_name, 'created', $thirdpartyData));
 
             // Broadcast pending counts update to developers with access to this project
             $this->broadcastPendingCountsForProject($request->project_name);
@@ -332,7 +321,8 @@ class FinanceThirdpartyController extends Controller
             $thirdparty->load(['creator:id,full_name,email', 'unit', 'attachments']);
 
             // Broadcast event
-            event(new FinanceThirdpartyUpdated($thirdparty->project_name, $thirdparty, 'sent-to-buyer'));
+            $thirdpartyBroadcastData = $this->formatThirdpartyData($thirdparty);
+            broadcast(new FinanceThirdpartyUpdated($thirdparty->project_name, 'sent-to-buyer', $thirdpartyBroadcastData));
 
             return response()->json([
                 'success' => true,
@@ -414,7 +404,8 @@ class FinanceThirdpartyController extends Controller
             $thirdparty->load(['attachments']);
 
             // Broadcast event
-            event(new FinanceThirdpartyUpdated($thirdparty->project_name, $thirdparty, 'signed-uploaded'));
+            $thirdpartySignedData = $this->formatThirdpartyData($thirdparty);
+            broadcast(new FinanceThirdpartyUpdated($thirdparty->project_name, 'signed-uploaded', $thirdpartySignedData));
 
             return response()->json([
                 'success' => true,
@@ -538,6 +529,10 @@ class FinanceThirdpartyController extends Controller
             $thirdparty->sent_to_developer_at = now();
             $thirdparty->save();
 
+            $thirdparty->load(['attachments']);
+            $thirdpartyDevData = $this->formatThirdpartyData($thirdparty);
+            broadcast(new FinanceThirdpartyUpdated($thirdparty->project_name, 'sent-to-developer', $thirdpartyDevData));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Thirdparty sent to developer successfully',
@@ -605,6 +600,10 @@ class FinanceThirdpartyController extends Controller
                 $this->broadcastPendingCountsForProject($thirdparty->project_name);
             }
 
+            $thirdparty->load(['attachments']);
+            $thirdpartyReceiptData = $this->formatThirdpartyData($thirdparty);
+            broadcast(new FinanceThirdpartyUpdated($thirdparty->project_name, 'receipt-uploaded', $thirdpartyReceiptData));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Receipt uploaded successfully',
@@ -642,6 +641,10 @@ class FinanceThirdpartyController extends Controller
             $thirdparty->viewed_by_developer = true;
             $thirdparty->viewed_at = now();
             $thirdparty->save();
+
+            $thirdparty->load(['attachments']);
+            $thirdpartyViewedData = $this->formatThirdpartyData($thirdparty);
+            broadcast(new FinanceThirdpartyUpdated($thirdparty->project_name, 'viewed', $thirdpartyViewedData));
 
             return response()->json([
                 'success' => true,
@@ -694,6 +697,11 @@ class FinanceThirdpartyController extends Controller
                 'file_size' => $file->getSize(),
                 'uploaded_by' => Auth::id(),
             ]);
+
+            // Broadcast attachment-added event
+            $thirdparty->load(['attachments']);
+            $thirdpartyAttachData = $this->formatThirdpartyData($thirdparty);
+            broadcast(new FinanceThirdpartyUpdated($thirdparty->project_name, 'attachment-added', $thirdpartyAttachData));
 
             return response()->json([
                 'success' => true,
@@ -833,6 +841,10 @@ class FinanceThirdpartyController extends Controller
             $thirdparty->receipt_sent_to_buyer_at = now();
             $thirdparty->save();
 
+            $thirdparty->load(['attachments']);
+            $thirdpartyRcptBuyerData = $this->formatThirdpartyData($thirdparty);
+            broadcast(new FinanceThirdpartyUpdated($thirdparty->project_name, 'receipt-sent-to-buyer', $thirdpartyRcptBuyerData));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Receipt sent to buyer successfully',
@@ -844,6 +856,51 @@ class FinanceThirdpartyController extends Controller
                 'message' => 'Failed to send receipt to buyer: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Format thirdparty data for broadcast/response (consistent shape)
+     */
+    private function formatThirdpartyData(FinanceThirdparty $thirdparty): array
+    {
+        $thirdparty->loadMissing(['attachments']);
+
+        return [
+            'id' => $thirdparty->id,
+            'thirdpartyNumber' => $thirdparty->thirdparty_number,
+            'thirdpartyName' => $thirdparty->thirdparty_name,
+            'unitNumber' => $thirdparty->unit_number,
+            'unitId' => $thirdparty->unit_id,
+            'projectName' => $thirdparty->project_name,
+            'description' => $thirdparty->description,
+            'notes' => $thirdparty->notes,
+            'formDocumentUrl' => $thirdparty->form_document_url,
+            'formDocumentName' => $thirdparty->form_document_name,
+            'signedDocumentUrl' => $thirdparty->signed_document_url,
+            'signedDocumentName' => $thirdparty->signed_document_name,
+            'receiptDocumentUrl' => $thirdparty->receipt_document_url,
+            'receiptDocumentName' => $thirdparty->receipt_document_name,
+            'date' => $thirdparty->created_at->format('Y-m-d'),
+            'notificationSent' => $thirdparty->notification_sent,
+            'viewedByDeveloper' => $thirdparty->viewed_by_developer,
+            'viewedAt' => $thirdparty->viewed_at?->format('Y-m-d H:i:s'),
+            'sentToBuyer' => (bool) $thirdparty->sent_to_buyer,
+            'sentToBuyerAt' => $thirdparty->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+            'sentToDeveloper' => (bool) $thirdparty->sent_to_developer,
+            'sentToDeveloperAt' => $thirdparty->sent_to_developer_at?->format('Y-m-d H:i:s'),
+            'receiptSentToBuyer' => (bool) $thirdparty->receipt_sent_to_buyer,
+            'receiptSentToBuyerAt' => $thirdparty->receipt_sent_to_buyer_at?->format('Y-m-d H:i:s'),
+            'attachments' => $thirdparty->attachments->map(function ($att) {
+                return [
+                    'id' => $att->id,
+                    'fileName' => $att->file_name,
+                    'fileUrl' => $att->file_url,
+                    'fileSize' => $att->file_size,
+                    'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                ];
+            }),
+            'timeline' => $thirdparty->timeline,
+        ];
     }
 
     /**
