@@ -1259,7 +1259,7 @@ class FinancePOPController extends Controller
      */
     public function sendReceiptToBuyer(Request $request, $id)
     {
-        $pop = FinancePOP::with('unit.primaryFinanceEmail')->find($id);
+        $pop = FinancePOP::with(['unit.primaryFinanceEmail', 'popUnits'])->find($id);
 
         if (!$pop) {
             return response()->json([
@@ -1268,10 +1268,20 @@ class FinancePOPController extends Controller
             ], 404);
         }
 
-        if (!$pop->receipt_path) {
+        // Determine receipts to attach: prefer popUnits (multi-unit schema), fall back to legacy receipt_path
+        $hasPopUnits = $pop->popUnits && $pop->popUnits->count() > 0;
+        $unitReceipts = $hasPopUnits
+            ? $pop->popUnits->filter(fn($pu) => !empty($pu->receipt_path))->values()
+            : collect();
+
+        $hasAnyReceipt = $hasPopUnits
+            ? $unitReceipts->count() > 0
+            : !empty($pop->receipt_path);
+
+        if (!$hasAnyReceipt) {
             return response()->json([
                 'success' => false,
-                'message' => 'Receipt has not been uploaded yet',
+                'message' => 'No receipts have been uploaded yet',
             ], 400);
         }
 
@@ -1309,34 +1319,59 @@ class FinancePOPController extends Controller
                 );
             }
 
+            // Build unit list string
+            $unitNumbersList = $hasPopUnits
+                ? $pop->popUnits->pluck('unit_number')->join(', ')
+                : $pop->unit_number;
+            $unitCount = $hasPopUnits ? $pop->popUnits->count() : 1;
+            $subjectUnit = $unitCount > 1 ? "Units {$unitNumbersList}" : "Unit {$pop->unit_number}";
+
             // Prepare email data
             $emailData = [
-                'subject' => "Payment Receipt - Unit {$pop->unit_number}",
+                'subject' => "Payment Receipt - {$subjectUnit}",
                 'transactionType' => 'POP Receipt',
                 'buyerName' => $buyerName,
-                'messageBody' => 'Thank you for your payment. Please find attached your payment receipt for your reference.',
+                'messageBody' => $unitCount > 1
+                    ? "Thank you for your payment. Please find attached the payment receipts for all units in this POP."
+                    : 'Thank you for your payment. Please find attached your payment receipt for your reference.',
                 'details' => [
                     'POP Number' => $pop->pop_number,
-                    'Unit Number' => $pop->unit_number,
+                    'Unit(s)' => $unitNumbersList,
                     'Project' => $pop->project_name,
                 ],
-                'buttonUrl' => url('api/storage/' . $pop->receipt_path),
+                'buttonUrl' => url('api/storage/' . ($hasPopUnits && $unitReceipts->count() > 0 ? $unitReceipts->first()->receipt_path : $pop->receipt_path)),
                 'buttonText' => 'View Receipt',
             ];
 
-            // Send email with receipt attachment
-            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop) {
+            // Send email with all receipt attachments
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop, $hasPopUnits, $unitReceipts) {
                 $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
+                $unitCount = $hasPopUnits ? $pop->popUnits->count() : 1;
+                $unitNumbersList = $hasPopUnits ? $pop->popUnits->pluck('unit_number')->join(', ') : $pop->unit_number;
+                $subjectUnit = $unitCount > 1 ? "Units {$unitNumbersList}" : "Unit {$pop->unit_number}";
+
                 $message->to($buyerEmail)
-                    ->subject("Payment Receipt - Unit {$pop->unit_number}")
+                    ->subject("Payment Receipt - {$subjectUnit}")
                     ->cc($staticCc);
-                
-                // Attach receipt file if it exists
-                if ($pop->receipt_path && \Storage::disk('public')->exists($pop->receipt_path)) {
+
+                if ($hasPopUnits && $unitReceipts->count() > 0) {
+                    // Attach each unit's receipt
+                    foreach ($unitReceipts as $pu) {
+                        if (\Storage::disk('public')->exists($pu->receipt_path)) {
+                            $filePath = storage_path('app/public/' . $pu->receipt_path);
+                            $fileName = $pu->receipt_name ?? ('Receipt_Unit_' . $pu->unit_number . '.pdf');
+                            $message->attach($filePath, [
+                                'as' => $fileName,
+                                'mime' => mime_content_type($filePath),
+                            ]);
+                        }
+                    }
+                } elseif ($pop->receipt_path && \Storage::disk('public')->exists($pop->receipt_path)) {
+                    // Legacy single-receipt fallback
                     $filePath = storage_path('app/public/' . $pop->receipt_path);
                     $message->attach($filePath, [
                         'as' => $pop->receipt_name ?? 'Receipt.pdf',
-                        'mime' => mime_content_type($filePath)
+                        'mime' => mime_content_type($filePath),
                     ]);
                 }
             });

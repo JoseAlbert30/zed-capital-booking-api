@@ -416,7 +416,7 @@ class DevAuthController extends Controller
                 ->whereNull('receipt_document_path')
                 ->count();
             
-            $projectTotal = $popCount + $penaltyCount + $thirdpartyCount;
+            $projectTotal = $popCount + $soaCount + $nocCount + $penaltyCount + $thirdpartyCount;
             
             $projectCounts[$projectName] = [
                 'pop' => $popCount,
