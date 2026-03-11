@@ -109,7 +109,9 @@ class FinancePOPController extends Controller
                         ? $pop->popUnits->pluck('unit_number')->toArray()
                         : [$pop->unit_number],
                     'allReceiptsUploaded' => $pop->popUnits && $pop->popUnits->count() > 0
-                        ? $pop->popUnits->every(fn($pu) => !empty($pu->receipt_path))
+                        ? ($pop->popUnits->every(fn($pu) => !empty($pu->receipt_path))
+                            // Fallback: single-unit POP uploaded via old endpoint (receipt on POP but not yet on unit row)
+                            || ($pop->popUnits->count() === 1 && !empty($pop->receipt_path)))
                         : !empty($pop->receipt_path),
                 ];
             }),
@@ -580,6 +582,18 @@ class FinancePOPController extends Controller
             $pop->receipt_uploaded_at = now();
             $pop->receipt_uploaded_by = $uploaderName;
             $pop->save();
+
+            // Sync the pop unit's receipt_path if this is a single-unit POP using the new schema
+            // (units created via the new store() method have a finance_pop_units row)
+            $pop->load('popUnits');
+            if ($pop->popUnits->count() === 1) {
+                $popUnit = $pop->popUnits->first();
+                $popUnit->receipt_path = $receiptPath;
+                $popUnit->receipt_name = $receiptFileName;
+                $popUnit->receipt_uploaded_at = now();
+                $popUnit->receipt_uploaded_by = $uploaderName;
+                $popUnit->save();
+            }
 
             // Send email notification to admin
             $this->sendReceiptUploadedNotificationToAdmin($pop, $uploaderName);
@@ -1115,7 +1129,9 @@ class FinancePOPController extends Controller
                 ? $popUnits->pluck('unit_number')->toArray()
                 : [$pop->unit_number],
             'allReceiptsUploaded' => $hasPopUnits
-                ? $popUnits->every(fn($pu) => !empty($pu->receipt_path))
+                ? ($popUnits->every(fn($pu) => !empty($pu->receipt_path))
+                    // Fallback: single-unit POP uploaded via old endpoint (receipt on POP but not yet on unit row)
+                    || ($popUnits->count() === 1 && !empty($pop->receipt_path)))
                 : !empty($pop->receipt_path),
         ];
     }
