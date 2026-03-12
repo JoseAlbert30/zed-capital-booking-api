@@ -15,7 +15,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_KEY }}
-          envs: GH_PAT=${{ secrets.GH_PAT }}
+          envs: GH_PAT
           script: |
             set -e
             cd /var/www/zed-capital-booking-api
@@ -51,3 +51,5 @@ jobs:
             php artisan queue:restart
             
             sudo systemctl reload nginx
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
