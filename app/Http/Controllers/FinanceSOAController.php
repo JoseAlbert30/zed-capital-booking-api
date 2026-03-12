@@ -322,6 +322,91 @@ class FinanceSOAController extends Controller
     }
 
     /**
+     * Update a SOA (Admin only - locked once developer has provided the document)
+     */
+    public function update(Request $request, $id)
+    {
+        $soa = FinanceSOA::find($id);
+
+        if (!$soa) {
+            return response()->json([
+                'success' => false,
+                'message' => 'SOA request not found',
+            ], 404);
+        }
+
+        // Lock editing once the developer has provided the document
+        if ($soa->document_path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This SOA cannot be edited because the developer has already provided the document.',
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'description' => 'nullable|string',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $soa->description = $request->input('description');
+            $soa->notes = $request->input('notes');
+            $soa->save();
+
+            $soa->load('creator:id,full_name,email', 'unit', 'attachments');
+
+            $soaData = [
+                'id' => $soa->id,
+                'soaNumber' => $soa->soa_number,
+                'unitNumber' => $soa->unit_number,
+                'unitId' => $soa->unit_id,
+                'projectName' => $soa->project_name,
+                'description' => $soa->description,
+                'notes' => $soa->notes,
+                'documentUrl' => $soa->document_url,
+                'documentName' => $soa->document_name,
+                'date' => $soa->created_at->format('Y-m-d'),
+                'notificationSent' => $soa->notification_sent,
+                'viewedByDeveloper' => $soa->viewed_by_developer,
+                'viewedAt' => $soa->viewed_at?->format('Y-m-d H:i:s'),
+                'sentToBuyer' => (bool) $soa->sent_to_buyer,
+                'sentToBuyerAt' => $soa->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'attachments' => $soa->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
+                'timeline' => $soa->timeline,
+            ];
+
+            broadcast(new FinanceSOAUpdated($soa->project_name, 'updated', $soaData));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'SOA updated successfully',
+                'soa' => $soaData,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update SOA: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Delete a SOA
      */
     public function destroy($id)

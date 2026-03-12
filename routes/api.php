@@ -266,6 +266,7 @@ Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
     
     // SOA admin routes
     Route::post('/soas', [FinanceSOAController::class, 'store']);
+    Route::put('/soas/{id}', [FinanceSOAController::class, 'update']);
     Route::delete('/soas/{id}', [FinanceSOAController::class, 'destroy']);
     Route::post('/soas/{id}/resend-notification', [FinanceSOAController::class, 'resendNotification']);
     Route::post('/soas/{id}/send-to-buyer', [FinanceSOAController::class, 'sendToBuyer']);
@@ -276,6 +277,7 @@ Route::middleware(['auth:sanctum'])->prefix('finance')->group(function () {
     
     // NOC admin routes
     Route::post('/nocs', [FinanceNOCController::class, 'store']);
+    Route::put('/nocs/{id}', [FinanceNOCController::class, 'update']);
     Route::delete('/nocs/{id}', [FinanceNOCController::class, 'destroy']);
     Route::post('/nocs/{id}/resend-notification', [FinanceNOCController::class, 'resendNotification']);
     Route::post('/nocs/{id}/send-to-buyer', [FinanceNOCController::class, 'sendToBuyer']);

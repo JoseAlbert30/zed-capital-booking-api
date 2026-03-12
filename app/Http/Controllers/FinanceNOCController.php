@@ -323,6 +323,94 @@ class FinanceNOCController extends Controller
     }
 
     /**
+     * Update a NOC (Admin only - locked once developer has provided the document)
+     */
+    public function update(Request $request, $id)
+    {
+        $noc = FinanceNOC::find($id);
+
+        if (!$noc) {
+            return response()->json([
+                'success' => false,
+                'message' => 'NOC not found',
+            ], 404);
+        }
+
+        // Lock editing once the developer has provided the document
+        if ($noc->document_path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This NOC cannot be edited because the developer has already provided the document.',
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'noc_name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $noc->noc_name = $request->input('noc_name');
+            $noc->description = $request->input('description');
+            $noc->notes = $request->input('notes');
+            $noc->save();
+
+            $noc->load('creator:id,full_name,email', 'unit', 'attachments');
+
+            $nocData = [
+                'id' => $noc->id,
+                'nocNumber' => $noc->noc_number,
+                'nocName' => $noc->noc_name,
+                'unitNumber' => $noc->unit_number,
+                'unitId' => $noc->unit_id,
+                'projectName' => $noc->project_name,
+                'description' => $noc->description,
+                'notes' => $noc->notes,
+                'documentUrl' => $noc->document_url,
+                'documentName' => $noc->document_name,
+                'date' => $noc->created_at->format('Y-m-d'),
+                'notificationSent' => $noc->notification_sent,
+                'viewedByDeveloper' => $noc->viewed_by_developer,
+                'viewedAt' => $noc->viewed_at?->format('Y-m-d H:i:s'),
+                'sentToBuyer' => (bool) $noc->sent_to_buyer,
+                'sentToBuyerAt' => $noc->sent_to_buyer_at?->format('Y-m-d H:i:s'),
+                'attachments' => $noc->attachments->map(function ($att) {
+                    return [
+                        'id' => $att->id,
+                        'fileName' => $att->file_name,
+                        'fileUrl' => $att->file_url,
+                        'fileSize' => $att->file_size,
+                        'uploadedAt' => $att->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
+                'timeline' => $noc->timeline,
+            ];
+
+            broadcast(new FinanceNOCUpdated($noc->project_name, 'updated', $nocData));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'NOC updated successfully',
+                'noc' => $nocData,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update NOC: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Delete a NOC
      */
     public function destroy($id)

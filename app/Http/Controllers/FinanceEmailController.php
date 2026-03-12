@@ -34,20 +34,37 @@ class FinanceEmailController extends Controller
             $csvData = array_map('str_getcsv', file($file->getRealPath()));
 
             // First row should be headers — normalise: trim, lowercase, collapse spaces
-            // Also strip UTF-8 BOM that Excel adds to CSV files
-            $headers = array_map(function ($h) {
-                $h = preg_replace('/^\xEF\xBB\xBF/', '', $h); // strip BOM
-                return preg_replace('/\s+/', ' ', strtolower(trim($h)));
-            }, $csvData[0]);
+            // Also strip UTF-8 BOM that Excel adds to CSV files, and non-breaking spaces (\xC2\xA0)
+            $normalizeHeader = function ($h) {
+                $h = preg_replace('/^\xEF\xBB\xBF/', '', $h);    // strip UTF-8 BOM
+                $h = str_replace("\xC2\xA0", ' ', $h);            // non-breaking space → regular space
+                $h = preg_replace('/\s+/', ' ', strtolower(trim($h))); // lowercase + collapse whitespace
+                return $h;
+            };
+            $headers = array_map($normalizeHeader, $csvData[0]);
+
+            // Canonical form strips dots and replaces underscores with spaces for fuzzy matching
+            $canonicalForm = fn($s) => preg_replace('/\s+/', ' ', trim(str_replace(['_', '.'], [' ', ''], $s)));
 
             // Accept common variations for the unit column
             $unitColAliases = ['unit_number', 'unit no.', 'unit no', 'unit number', 'unit'];
             $unitNumberIndex = null;
+            // Exact match first
             foreach ($unitColAliases as $alias) {
                 $idx = array_search($alias, $headers);
                 if ($idx !== false) {
                     $unitNumberIndex = $idx;
                     break;
+                }
+            }
+            // Fallback: canonical match (strips dots/underscores) — catches "UNIT NO." → "unit no"
+            if ($unitNumberIndex === null) {
+                $canonicalUnitAliases = ['unit number', 'unit no', 'unit'];
+                foreach ($headers as $idx => $header) {
+                    if (in_array($canonicalForm($header), $canonicalUnitAliases)) {
+                        $unitNumberIndex = $idx;
+                        break;
+                    }
                 }
             }
 
