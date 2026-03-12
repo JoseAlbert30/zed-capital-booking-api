@@ -15,7 +15,6 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_KEY }}
-          envs: GH_PAT
           script: |
             set -e
             cd /var/www/zed-capital-booking-api
@@ -23,13 +22,9 @@ jobs:
             # Fix permissions before git operations
             sudo chown -R $USER:$USER .
             
-            ORIGIN_URL=$(git remote get-url origin)
-            AUTHED_URL=$(echo "$ORIGIN_URL" | sed "s|https://github.com|https://${GH_PAT}@github.com|")
-            git remote set-url origin "$AUTHED_URL"
             git fetch --all
             git reset --hard origin/main
             git clean -fd
-            git remote set-url origin "$ORIGIN_URL"
             composer install --no-dev --optimize-autoloader
             
             # Ensure storage is linked
@@ -51,5 +46,3 @@ jobs:
             php artisan queue:restart
             
             sudo systemctl reload nginx
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
