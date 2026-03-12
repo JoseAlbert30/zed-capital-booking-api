@@ -267,8 +267,11 @@ class FinancePOPController extends Controller
 
         $validator = Validator::make($request->all(), [
             'unit_number' => 'required|string',
+            'unit_numbers' => 'nullable|array',
+            'unit_numbers.*' => 'string',
             'buyer_email' => 'nullable|email',
             'attachment' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'notes' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -280,21 +283,50 @@ class FinancePOPController extends Controller
         }
 
         try {
-            // Find the unit by project and unit number
+            // Resolve full list of unit numbers: prefer unit_numbers[] array, fall back to single unit_number
+            $unitNumbers = $request->input('unit_numbers');
+            if (empty($unitNumbers)) {
+                $unitNumbers = [$request->input('unit_number')];
+            }
+            $primaryUnitNumber = $unitNumbers[0];
+
+            // Find the primary unit
             $unit = \App\Models\Unit::whereHas('property', function ($query) use ($pop) {
                 $query->where('project_name', $pop->project_name);
-            })->where('unit', $request->unit_number)->first();
+            })->where('unit', $primaryUnitNumber)->first();
 
             if (!$unit) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unit not found in this project',
+                    'message' => 'Unit not found in this project: ' . $primaryUnitNumber,
                 ], 404);
             }
 
             $pop->unit_id = $unit->id;
-            $pop->unit_number = $request->unit_number;
+            $pop->unit_number = $primaryUnitNumber;
             $pop->buyer_email = $request->buyer_email;
+            if ($request->has('notes')) {
+                $pop->notes = $request->notes;
+            }
+
+            // Sync popUnits to match the new unit list
+            // Delete units no longer in the list (preserve existing receipt data for ones kept)
+            $pop->popUnits()->whereNotIn('unit_number', $unitNumbers)->delete();
+
+            // Add any new units not already present
+            $existingUnitNumbers = $pop->popUnits()->pluck('unit_number')->toArray();
+            foreach ($unitNumbers as $unitNum) {
+                if (!in_array($unitNum, $existingUnitNumbers)) {
+                    $unitRecord = \App\Models\Unit::whereHas('property', function ($q) use ($pop) {
+                        $q->where('project_name', $pop->project_name);
+                    })->where('unit', $unitNum)->first();
+                    \App\Models\FinancePOPUnit::create([
+                        'pop_id' => $pop->id,
+                        'unit_id' => $unitRecord ? $unitRecord->id : null,
+                        'unit_number' => $unitNum,
+                    ]);
+                }
+            }
 
             // Update attachment if provided
             if ($request->hasFile('attachment')) {
@@ -306,7 +338,7 @@ class FinancePOPController extends Controller
                 // Store new file with new structure: finance/{project_name}/{unit_no}/
                 $file = $request->file('attachment');
                 $fileName = 'POP_' . $pop->pop_number . '_' . time() . '.' . $file->getClientOriginalExtension();
-                $storagePath = 'finance/' . $pop->project_name . '/' . $request->unit_number;
+                $storagePath = 'finance/' . $pop->project_name . '/' . $primaryUnitNumber;
                 $path = $file->storeAs($storagePath, $fileName, 'public');
 
                 $pop->attachment_path = $path;
@@ -314,22 +346,16 @@ class FinancePOPController extends Controller
             }
 
             $pop->save();
-            $pop->load('creator:id,full_name,email', 'unit', 'attachments');
+            $pop->load('creator:id,full_name,email', 'unit', 'attachments', 'popUnits');
+
+            $popData = $this->formatPOPResponse($pop);
+
+            broadcast(new \App\Events\FinancePOPUpdated($pop->project_name, 'updated', $popData));
 
             return response()->json([
                 'success' => true,
                 'message' => 'POP updated successfully',
-                'pop' => [
-                    'id' => $pop->id,
-                    'popNumber' => $pop->pop_number,
-                    'unitNumber' => $pop->unit_number,
-                    'unitId' => $pop->unit_id,
-                    'buyerEmail' => $pop->buyer_email,
-                    'attachmentUrl' => $pop->attachment_url,
-                    'attachmentName' => $pop->attachment_name,
-                    'date' => $pop->created_at->format('Y-m-d'),
-                    'notificationSent' => $pop->notification_sent,
-                ],
+                'pop' => $popData,
             ]);
         } catch (\Exception $e) {
             return response()->json([
