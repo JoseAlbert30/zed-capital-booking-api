@@ -717,7 +717,7 @@ class FinanceSOAController extends Controller
 
             // Send email with SOA document attachment
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
-                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae', 'accountsupport@zedcapital.ae'];
                 $message->to($buyerEmail)
                     ->subject("Statement of Account - Unit {$soa->unit_number}")
                     ->cc($staticCc);
@@ -847,7 +847,7 @@ class FinanceSOAController extends Controller
 
             // Send email with SOA document attachment
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
-                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae', 'accountsupport@zedcapital.ae'];
                 $message->to($buyerEmail)
                     ->subject("Statement of Account - Unit {$soa->unit_number}")
                     ->cc($staticCc);

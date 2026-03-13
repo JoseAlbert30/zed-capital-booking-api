@@ -300,7 +300,7 @@ class FinanceThirdpartyController extends Controller
             }
 
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
-                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae', 'accountsupport@zedcapital.ae'];
                 $allCc = array_values(array_unique(array_merge($staticCc, $ccEmailsArray)));
                 $message->to($toEmail)
                     ->subject("Thirdparty Form: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}")
@@ -826,7 +826,7 @@ class FinanceThirdpartyController extends Controller
             }
 
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($toEmail, $ccEmailsArray, $thirdparty) {
-                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae', 'accountsupport@zedcapital.ae'];
                 $allCc = array_values(array_unique(array_merge($staticCc, $ccEmailsArray)));
                 $message->to($toEmail)
                     ->subject("Thirdparty Receipt: {$thirdparty->thirdparty_name} - Unit {$thirdparty->unit_number}")

@@ -726,7 +726,7 @@ class FinanceNOCController extends Controller
 
             // Send email with NOC document attachment
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $noc) {
-                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae', 'accountsupport@zedcapital.ae';
                 $message->to($buyerEmail)
                     ->subject("NOC Document - {$noc->noc_name}")
                     ->cc($staticCc);
