@@ -1346,5 +1346,97 @@ class UserController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Create a new admin account directly (not promoted from a buyer).
+     */
+    public function createAdmin(Request $request): JsonResponse
+    {
+        $authUser = $request->user();
+        if (!$this->isAdmin($authUser->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'full_name' => 'required|string|max:255',
+            'email'     => 'required|email|unique:users,email',
+            'password'  => 'required|string|min:8',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first()], 422);
+        }
+
+        $isAdminColumn = \Schema::hasColumn('users', 'is_admin');
+
+        $user = User::create([
+            'full_name' => $request->full_name,
+            'email'     => $request->email,
+            'password'  => Hash::make($request->password),
+            'is_admin'  => $isAdminColumn ? true : false,
+        ]);
+
+        // If column not yet migrated, ensure the email is in config so they can still log in as admin
+        // (they will be fully admin once migration runs)
+
+        return response()->json([
+            'message' => 'Admin account created successfully',
+            'user'    => $user->only(['id', 'full_name', 'email']),
+        ], 201);
+    }
+
+    /**
+     * Get all admin users.
+     * Falls back to config('app.admin_emails') if is_admin column not yet migrated.
+     */
+    public function adminUsers(Request $request): JsonResponse
+    {
+        $authUser = $request->user();
+        if (!$this->isAdmin($authUser->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (\Schema::hasColumn('users', 'is_admin')) {
+            $admins = User::where('is_admin', true)
+                ->select(['id', 'full_name', 'email', 'mobile_number'])
+                ->get();
+        } else {
+            $adminEmails = config('app.admin_emails', []);
+            $admins = User::whereIn('email', $adminEmails)
+                ->select(['id', 'full_name', 'email', 'mobile_number'])
+                ->get();
+        }
+
+        return response()->json(['admins' => $admins]);
+    }
+
+    /**
+     * Grant or revoke admin status for a user.
+     * Requires is_admin column (run: php artisan migrate).
+     */
+    public function toggleAdminStatus(Request $request, User $user): JsonResponse
+    {
+        $authUser = $request->user();
+        if (!$this->isAdmin($authUser->email)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if ($authUser->id === $user->id) {
+            return response()->json(['message' => 'Cannot change your own admin status'], 422);
+        }
+
+        if (!\Schema::hasColumn('users', 'is_admin')) {
+            return response()->json([
+                'message' => 'Admin management requires a database migration. Please run: php artisan migrate',
+            ], 501);
+        }
+
+        $user->update(['is_admin' => !$user->is_admin]);
+
+        return response()->json([
+            'message' => $user->is_admin ? 'Admin access granted' : 'Admin access revoked',
+            'user' => $user->only(['id', 'full_name', 'email', 'is_admin']),
+        ]);
+    }
 }
 

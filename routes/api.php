@@ -64,6 +64,7 @@ Route::get('/storage/{path}', function ($path) {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::get('/auth/check', [AuthController::class, 'check']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/profile', [UserController::class, 'profile']);
 
@@ -71,11 +72,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/profile', [UserController::class, 'profile']);
         Route::put('/profile', [UserController::class, 'updateProfile']);
         Route::get('/all', [UserController::class, 'index']);
-        Route::get('/{id}', [UserController::class, 'show']);
+        Route::get('/admins/list', [UserController::class, 'adminUsers']);
+        Route::post('/admins/create', [UserController::class, 'createAdmin']);
         Route::post('/by-email', [UserController::class, 'getUserByEmail']);
         Route::post('/create-with-unit', [UserController::class, 'createWithUnit']);
         Route::get('/test-bulk-upload', [UserController::class, 'testBulkUpload']);
         Route::post('/bulk', [UserController::class, 'bulkUpload']);
+        Route::get('/{id}', [UserController::class, 'show']);
         Route::put('/{user}/payment-status', [UserController::class, 'updatePaymentStatus']);
         Route::post('/{user}/regenerate-password', [UserController::class, 'regeneratePassword']);
         Route::post('/{user}/remarks', [UserController::class, 'addRemark']);
@@ -84,6 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{user}/handover-status', [UserController::class, 'getHandoverStatus']);
         Route::put('/{user}/mortgage-status', [UserController::class, 'updateMortgageStatus']);
         Route::post('/{user}/send-booking-link', [UserController::class, 'sendBookingLink']);
+        Route::put('/{user}/admin-status', [UserController::class, 'toggleAdminStatus']);
     });
 
     Route::prefix('bookings')->group(function () {

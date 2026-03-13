@@ -77,6 +77,25 @@ class AuthController extends Controller
         return response()->json($user);
     }
 
+    /**
+     * Lightweight admin verification endpoint.
+     * Returns only id, email, and is_admin — no extra DB joins.
+     * Used by the frontend layout to server-verify admin status on every page load.
+     */
+    public function check(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $isAdminByDb = \Schema::hasColumn('users', 'is_admin')
+            ? (bool) $user->is_admin
+            : in_array($user->email, config('app.admin_emails', []));
+
+        return response()->json([
+            'id'       => $user->id,
+            'email'    => $user->email,
+            'is_admin' => $isAdminByDb,
+        ]);
+    }
+
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()->delete();

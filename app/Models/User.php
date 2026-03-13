@@ -25,6 +25,7 @@ class User extends Authenticatable
         'has_mortgage',
         'handover_email_sent',
         'handover_email_sent_at',
+        'is_admin',
     ];
 
     protected $hidden = [
@@ -38,6 +39,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'payment_date' => 'datetime',
             'password' => 'hashed',
+            'is_admin' => 'boolean',
         ];
     }
 
