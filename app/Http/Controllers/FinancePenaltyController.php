@@ -1193,8 +1193,8 @@ class FinancePenaltyController extends Controller
             $penalty = FinancePenalty::findOrFail($id);
             $file = $request->file('attachment');
             
-            // Generate unique filename
-            $filename = time() . '_' . $file->getClientOriginalName();
+            // Generate unique filename (sanitise URL-breaking chars like %)
+            $filename = time() . '_' . preg_replace('/[%#?&+\s]/', '_', $file->getClientOriginalName());
             $filePath = $file->storeAs('finance/penalty/attachments', $filename, 'public');
             
             // Create attachment record

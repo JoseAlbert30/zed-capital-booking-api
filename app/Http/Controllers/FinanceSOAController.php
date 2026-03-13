@@ -715,12 +715,21 @@ class FinanceSOAController extends Controller
                 'buttonText' => 'View SOA Document',
             ];
 
-            // Send email
+            // Send email with SOA document attachment
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $soa) {
                 $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
                 $message->to($buyerEmail)
                     ->subject("Statement of Account - Unit {$soa->unit_number}")
                     ->cc($staticCc);
+
+                // Attach SOA document if it exists
+                if ($soa->document_path && \Storage::disk('public')->exists($soa->document_path)) {
+                    $filePath = storage_path('app/public/' . $soa->document_path);
+                    $message->attach($filePath, [
+                        'as' => $soa->document_name ?? 'SOA_Document.pdf',
+                        'mime' => mime_content_type($filePath)
+                    ]);
+                }
             });
 
             // Update SOA
@@ -886,8 +895,8 @@ class FinanceSOAController extends Controller
             $soa = FinanceSOA::findOrFail($id);
             $file = $request->file('attachment');
             
-            // Generate unique filename
-            $filename = time() . '_' . $file->getClientOriginalName();
+            // Generate unique filename (sanitise URL-breaking chars like %)
+            $filename = time() . '_' . preg_replace('/[%#?&+\s]/', '_', $file->getClientOriginalName());
             $filePath = $file->storeAs('finance/soa/attachments', $filename, 'public');
             
             // Create attachment record

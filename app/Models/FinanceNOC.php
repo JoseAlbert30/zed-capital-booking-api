@@ -128,6 +128,16 @@ class FinanceNOC extends Model
             ];
         }
 
+        // Sent to buyer
+        if ($this->sent_to_buyer_at) {
+            $timeline[] = [
+                'action' => 'NOC Sent to Buyer',
+                'date' => $this->sent_to_buyer_at->timezone('Asia/Dubai')->format('M d, Y'),
+                'time' => $this->sent_to_buyer_at->timezone('Asia/Dubai')->format('h:i A'),
+                'user' => 'Admin',
+            ];
+        }
+
         return $timeline;
     }
 

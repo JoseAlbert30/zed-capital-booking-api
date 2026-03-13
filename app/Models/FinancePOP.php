@@ -167,6 +167,15 @@ class FinancePOP extends Model
             ];
         }
 
+        if ($this->receipt_sent_to_buyer_at) {
+            $timeline[] = [
+                'action' => 'Receipt Sent to Buyer',
+                'date' => $this->receipt_sent_to_buyer_at->timezone('Asia/Dubai')->format('Y-m-d'),
+                'time' => $this->receipt_sent_to_buyer_at->timezone('Asia/Dubai')->format('H:i:s'),
+                'user' => 'Admin',
+            ];
+        }
+
         if ($this->soa_sent_to_buyer_at) {
             $timeline[] = [
                 'action' => 'SOA Sent to Buyer',

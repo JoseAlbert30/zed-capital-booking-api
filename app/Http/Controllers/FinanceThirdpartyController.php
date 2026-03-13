@@ -687,7 +687,8 @@ class FinanceThirdpartyController extends Controller
         try {
             $file = $request->file('attachment');
             
-            $filename = time() . '_' . $file->getClientOriginalName();
+            // Sanitise URL-breaking chars like % before storing
+            $filename = time() . '_' . preg_replace('/[%#?&+\s]/', '_', $file->getClientOriginalName());
             $filePath = $file->storeAs('finance/thirdparty/attachments', $filename, 'public');
             
             $attachment = $thirdparty->attachments()->create([

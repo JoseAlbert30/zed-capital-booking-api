@@ -1294,14 +1294,21 @@ class FinancePOPController extends Controller
             ], 404);
         }
 
-        // Determine receipts to attach: prefer popUnits (multi-unit schema), fall back to legacy receipt_path
+        // Determine receipts to attach: prefer popUnits (multi-unit schema), fall back to legacy receipt_path.
+        // Fallback: if there's exactly one pop_units row with no receipt but the POP itself has receipt_path
+        // (uploaded via the legacy single-unit endpoint), use the POP-level receipt.
         $hasPopUnits = $pop->popUnits && $pop->popUnits->count() > 0;
         $unitReceipts = $hasPopUnits
             ? $pop->popUnits->filter(fn($pu) => !empty($pu->receipt_path))->values()
             : collect();
 
+        $legacyReceiptFallback = $hasPopUnits
+            && $unitReceipts->count() === 0
+            && $pop->popUnits->count() === 1
+            && !empty($pop->receipt_path);
+
         $hasAnyReceipt = $hasPopUnits
-            ? $unitReceipts->count() > 0
+            ? ($unitReceipts->count() > 0 || $legacyReceiptFallback)
             : !empty($pop->receipt_path);
 
         if (!$hasAnyReceipt) {
@@ -1365,12 +1372,12 @@ class FinancePOPController extends Controller
                     'Unit(s)' => $unitNumbersList,
                     'Project' => $pop->project_name,
                 ],
-                'buttonUrl' => url('api/storage/' . ($hasPopUnits && $unitReceipts->count() > 0 ? $unitReceipts->first()->receipt_path : $pop->receipt_path)),
+                'buttonUrl' => url('api/storage/' . ($unitReceipts->count() > 0 ? $unitReceipts->first()->receipt_path : $pop->receipt_path)),
                 'buttonText' => 'View Receipt',
             ];
 
             // Send email with all receipt attachments
-            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop, $hasPopUnits, $unitReceipts) {
+            Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop, $hasPopUnits, $unitReceipts, $legacyReceiptFallback) {
                 $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
                 $unitCount = $hasPopUnits ? $pop->popUnits->count() : 1;
                 $unitNumbersList = $hasPopUnits ? $pop->popUnits->pluck('unit_number')->join(', ') : $pop->unit_number;
@@ -1380,8 +1387,8 @@ class FinancePOPController extends Controller
                     ->subject("Payment Receipt - {$subjectUnit}")
                     ->cc($staticCc);
 
-                if ($hasPopUnits && $unitReceipts->count() > 0) {
-                    // Attach each unit's receipt
+                if ($unitReceipts->count() > 0) {
+                    // Attach each unit's receipt from pop_units rows
                     foreach ($unitReceipts as $pu) {
                         if (\Storage::disk('public')->exists($pu->receipt_path)) {
                             $filePath = storage_path('app/public/' . $pu->receipt_path);
@@ -1393,7 +1400,7 @@ class FinancePOPController extends Controller
                         }
                     }
                 } elseif ($pop->receipt_path && \Storage::disk('public')->exists($pop->receipt_path)) {
-                    // Legacy single-receipt fallback
+                    // Legacy fallback: receipt stored on POP directly (not yet synced to pop_units)
                     $filePath = storage_path('app/public/' . $pop->receipt_path);
                     $message->attach($filePath, [
                         'as' => $pop->receipt_name ?? 'Receipt.pdf',
@@ -1475,8 +1482,8 @@ class FinancePOPController extends Controller
             $pop = FinancePOP::findOrFail($id);
             $file = $request->file('attachment');
             
-            // Generate unique filename
-            $filename = time() . '_' . $file->getClientOriginalName();
+            // Generate unique filename (sanitise URL-breaking chars like %)
+            $filename = time() . '_' . preg_replace('/[%#?&+\s]/', '_', $file->getClientOriginalName());
             $filePath = $file->storeAs('finance/pop/attachments', $filename, 'public');
             
             // Create attachment record

@@ -94,9 +94,10 @@ class FinanceNoteController extends Controller
         // Handle file attachments
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
+                $safeFileName = time() . '_' . preg_replace('/[%#?&+\s]/', '_', $file->getClientOriginalName());
                 $path = $file->storeAs(
                     'finance/notes/' . $request->project_name,
-                    time() . '_' . $file->getClientOriginalName(),
+                    $safeFileName,
                     'public'
                 );
                 FinanceNoteAttachment::create([
@@ -179,16 +180,12 @@ class FinanceNoteController extends Controller
         try {
             $property    = Property::where('project_name', $projectName)->first();
             $adminEmails = ['wbd@zedcapital.ae'];
-            $adminCcEmails = [];
 
             if ($property && $property->admin_emails) {
                 $parsed = array_filter(array_map('trim', explode(',', $property->admin_emails)));
                 if (!empty($parsed)) {
                     $adminEmails = $parsed;
                 }
-            }
-            if ($property && $property->admin_cc_emails) {
-                $adminCcEmails = array_filter(array_map('trim', explode(',', $property->admin_cc_emails)));
             }
 
             $emailData = [
@@ -203,12 +200,9 @@ class FinanceNoteController extends Controller
                 ],
             ];
 
-            Mail::mailer('finance')->send('emails.finance-note-to-admin', $emailData, function ($message) use ($adminEmails, $adminCcEmails, $note, $projectName) {
+            Mail::mailer('finance')->send('emails.finance-note-to-admin', $emailData, function ($message) use ($adminEmails, $note, $projectName) {
                 $message->to($adminEmails)
                     ->subject("Developer Note: {$note->sent_by_name} – {$projectName}");
-                if (!empty($adminCcEmails)) {
-                    $message->cc($adminCcEmails);
-                }
             });
         } catch (\Exception $e) {
             Log::error("Failed to send developer note notification to admin: " . $e->getMessage());
@@ -247,11 +241,6 @@ class FinanceNoteController extends Controller
                 );
             }
 
-            $ccEmails = [];
-            if ($property->cc_emails) {
-                $ccEmails = array_filter(array_map('trim', explode(',', $property->cc_emails)));
-            }
-
             $emailData = [
                 'subject'         => "Admin Reply – {$projectName}",
                 'transactionType' => 'Admin Reply',
@@ -265,12 +254,9 @@ class FinanceNoteController extends Controller
                 'magicLink'       => config('app.frontend_url') . '/developer/portal?token=' . $magicLink->token,
             ];
 
-            Mail::mailer('finance')->send('emails.finance-note-to-developer', $emailData, function ($message) use ($property, $ccEmails, $projectName) {
+            Mail::mailer('finance')->send('emails.finance-note-to-developer', $emailData, function ($message) use ($property, $projectName) {
                 $message->to($property->developer_email)
                     ->subject("Admin Reply – {$projectName}");
-                if (!empty($ccEmails)) {
-                    $message->cc($ccEmails);
-                }
             });
         } catch (\Exception $e) {
             Log::error("Failed to send admin reply notification to developer: " . $e->getMessage());
