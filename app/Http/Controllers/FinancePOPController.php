@@ -1378,7 +1378,7 @@ class FinancePOPController extends Controller
 
             // Send email with all receipt attachments
             Mail::mailer('finance')->send('emails.finance-to-buyer', $emailData, function ($message) use ($buyerEmail, $pop, $hasPopUnits, $unitReceipts, $legacyReceiptFallback) {
-                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae'];
+                $staticCc = ['wbd@zedcapital.ae', 'president@zedcapital.ae', 'finance@zedcapital.ae', 'accounting@zedcapital.ae', 'accounts@zedcapital.ae', 'operations@zedcapital.ae', 'accountsupport@zedcapital.ae'];
                 $unitCount = $hasPopUnits ? $pop->popUnits->count() : 1;
                 $unitNumbersList = $hasPopUnits ? $pop->popUnits->pluck('unit_number')->join(', ') : $pop->unit_number;
                 $subjectUnit = $unitCount > 1 ? "Units {$unitNumbersList}" : "Unit {$pop->unit_number}";
