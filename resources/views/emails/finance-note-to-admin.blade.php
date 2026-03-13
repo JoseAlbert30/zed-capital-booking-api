@@ -27,9 +27,16 @@
     </style>
 </head>
 <body>
+    @php
+        $logoPath = public_path('storage/letterheads/zed.png');
+        $logoBase64 = '';
+        if (file_exists($logoPath)) {
+            $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+        }
+    @endphp
     <div class="email-container">
         <div class="logo-header">
-            <img src="https://i.ibb.co/d0QP4tBP/Black-Logo-Zed-Cap.png" alt="Zed Capital" style="max-width: 200px; height: auto;">
+            <img src="{{ $logoBase64 ?: asset('storage/letterheads/zed.png') }}" alt="Zed Capital" style="max-width: 200px; height: auto;">
         </div>
 
         <div class="content">
